@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package PB_System;
+option java_package = "com.flipperdevices.protobuf.system";
+
+message PingRequest {
+    bytes data = 1;
+}
+
+message PingResponse {
+    bytes data = 1;
+}
+
+message DeviceInfoRequest {
+}
+
+message DeviceInfoResponse {
+    string key = 1;
+    string value = 2;
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "dist/types",
+    "baseUrl": "lib",
+    "types": ["node"],
+    "target": "es2022",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"]
+  },
+  "include": ["lib"],
+  "exclude": ["node_modules", "../../node_modules"]
+}

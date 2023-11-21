@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "Node16",
+    "module": "Node16",
+    "typeRoots": ["node_modules/@types", "./types"],
+  },
+  "exclude": ["node_modules", "../../node_modules"]
+}

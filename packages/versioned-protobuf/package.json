@@ -1,0 +1,37 @@
+{
+  "name": "@flipper-rpc-client/versioned-protobuf",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.cjs",
+      "types": "./index.d.ts"
+    },
+    "./v/*": {
+      "import": "./v/*/index.js",
+      "require": "./v/*/index.cjs",
+      "types": "./v/*/index.d.ts"
+    },
+    "./bootstrap": {
+      "import": "./bootstrap.js",
+      "require": "./bootstrap.cjs",
+      "types": "./bootstrap.d.ts"
+    }
+  },
+  "files": [
+    "v/*/index.js",
+    "v/*/index.d.ts",
+    "v/*/index.cjs",
+    "bootstrap.js",
+    "bootstrap.d.ts",
+    "bootstrap.cjs",
+    "index.js",
+    "index.d.ts",
+    "index.cjs"
+  ],
+  "main": "./index.js",
+  "types": "dist/types/index.d.ts",
+  "dependencies": {
+    "protobufjs": "7.2.5"
+  }
+}

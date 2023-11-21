@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "declarationDir": null,
+    "outDir": "dist/esm",
+    "module": "ES2022",
+  },
+  "include": ["lib"],
+  "exclude": ["node_modules", "../../node_modules"]
+}

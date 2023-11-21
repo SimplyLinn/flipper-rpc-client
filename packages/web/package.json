@@ -1,0 +1,10 @@
+{
+    "name": "@flipper-rpc-client/web",
+    "dependencies": {
+        "@flipper-rpc-client/core": "workspace:*",
+        "@flipper-rpc-client/versioned-protobuf": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/w3c-web-serial": "1.0.6"
+    }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@flipper-rpc-client/core",
+  "type": "module",
+  "exports": {
+    "require": "./dist/cjs/index.js",
+    "import": "./dist/esm/index.js",
+    "types": "./dist/types/index.d.ts"
+  },
+  "main": "dist/cjs/index.js",
+  "types": "dist/types/index.d.ts",
+  "dependencies": {
+    "@flipper-rpc-client/versioned-protobuf": "workspace:*",
+    "protobufjs": "7.2.5"
+  },
+  "devDependencies": {
+    "long": "5.2.3"
+  }
+}

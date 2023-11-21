@@ -1,0 +1,21 @@
+{
+    "name": "@flipper-rpc-client/compile-proto",
+    "type": "module",
+    "bin": {
+        "compile-proto": "index.js"
+    },
+    "dependencies": {
+        "@typescript-eslint/eslint-plugin": "6.12.0",
+        "@typescript-eslint/parser": "6.12.0",
+        "eslint": "8.54.0",
+        "eslint-config-prettier": "9.0.0",
+        "eslint-plugin-eslint-plugin": "5.1.1",
+        "eslint-plugin-prettier": "5.0.1",
+        "prettier": "3.1.0",
+        "protobufjs-cli": "1.1.2",
+        "yargs": "17.7.2"
+    },
+    "devDependencies": {
+        "@types/yargs": "17.0.32"
+    }
+}

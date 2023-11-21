@@ -1,0 +1,51 @@
+{
+  "name": "flipper-rpc-client-project",
+  "version": "1.0.0-alpha1",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "clean": "lerna clean -y && lerna bootstrap && lerna run clean && lerna exec 'node ../../scripts/rm.mjs dist'",
+    "build": "turbo run build --remote-cache-timeout 60 --summarize true",
+    "lerna": "lerna",
+    "dev": "turbo run dev --parallel",
+    "typescript": "tsc --noEmit",
+    "lint-typescript": "turbo run typescript",
+    "lint-eslint": "eslint . --ext js,jsx,ts,tsx --max-warnings=0 --config .eslintrc.json --no-eslintrc",
+    "lint-no-typescript": "run-p prettier-check lint-eslint lint-language",
+    "lint": "run-p test-types lint-typescript prettier-check lint-eslint lint-language",
+    "lint-fix": "pnpm prettier-fix && eslint . --ext js,jsx,ts,tsx --fix --max-warnings=0 --config .eslintrc.json --no-eslintrc",
+    "lint-language": "alex .",
+    "prettier-check": "prettier --check .",
+    "prettier-fix": "prettier --write .",
+    "types": "lerna run types --stream",
+    "prepublishOnly": "turbo run build",
+    "lint-staged": "lint-staged",
+    "compile-proto": "compile-proto --root=packages/versioned-protobuf"
+  },
+  "devDependencies": {
+    "@flipper-rpc-client/compile-proto": "workspace:*",
+    "@types/node": "20.9.3",
+    "@typescript-eslint/eslint-plugin": "6.12.0",
+    "@typescript-eslint/parser": "6.12.0",
+    "alex": "11.0.1",
+    "eslint": "8.54.0",
+    "eslint-config-prettier": "9.0.0",
+    "eslint-plugin-eslint-plugin": "5.1.1",
+    "eslint-plugin-prettier": "5.0.1",
+    "lerna": "7.4.2",
+    "lint-staged": "15.1.0",
+    "prettier": "3.1.0",
+    "turbo": "1.10.16",
+    "typescript": "5.2.2"
+  },
+  "resolutions": {
+    "@types/node": "20.9.3"
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": "^8.9.0"
+  },
+  "packageManager": "pnpm@8.9.0"
+}

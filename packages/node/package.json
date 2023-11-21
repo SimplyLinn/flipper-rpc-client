@@ -1,0 +1,18 @@
+{
+    "name": "@flipper-rpc-client/node",
+    "type": "module",
+    "exports": {
+      "require": "./dist/cjs/index.js",
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "main": "dist/cjs/index.js",
+    "types": "dist/types/index.d.ts",
+    "dependencies": {
+        "@flipper-rpc-client/core": "workspace:*",
+        "@flipper-rpc-client/versioned-protobuf": "workspace:*"
+    },
+    "peerDependencies": {
+        "serialport": "^12.0.0"
+    }
+}

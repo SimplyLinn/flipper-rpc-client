@@ -1,0 +1,8 @@
+{
+    "name": "@flipper-rpc-client/node-test",
+    "type": "module",
+    "dependencies": {
+        "@flipper-rpc-client/node": "workspace:*",
+        "serialport": "12.0.0"
+    }
+}

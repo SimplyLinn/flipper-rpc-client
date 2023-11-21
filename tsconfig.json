@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+      "strict": true,
+      "noEmit": true,
+      "allowJs": true,
+      "resolveJsonModule": true,
+      "module": "esnext",
+      "target": "ESNext",
+      "esModuleInterop": true,
+      "moduleResolution": "node",
+      "baseUrl": ".",
+      "types": ["node"],
+      "typeRoots": ["node_modules/@types"],
+    },
+    "exclude": [
+      "node_modules",
+      "**/node_modules"
+    ]
+  }

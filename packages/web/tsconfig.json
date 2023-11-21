@@ -1,0 +1,23 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+      "strict": true,
+      "noEmit": false,
+      "baseUrl": "lib",
+      "types": ["node", "w3c-web-serial"],
+      "target": "es2022",
+      "lib": [
+        "DOM",
+        "DOM.Iterable",
+        "ESNext"
+      ],
+      "typeRoots": [
+        "../../node_modules/@types",
+        "node_modules/@types"
+      ],
+    },
+    "include": ["lib"],
+    "exclude": [
+      "node_modules"
+    ]
+  }
