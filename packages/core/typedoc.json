@@ -1,0 +1,14 @@
+{
+  "extends": ["../../typedoc.base.json"],
+  "entryPoints": [
+    "lib/index.ts",
+    "lib/RpcApi.ts",
+    "lib/RpcSerialPort.ts",
+    "lib/ScreenFrame.ts",
+    "lib/Types.ts",
+    "lib/StreamProtobufReader.ts",
+    "lib/Utils.ts",
+    "lib/Commands.ts"
+  ],
+  "intentionallyNotExported": ["lib/Types.ts:UpMap", "lib/Types.ts:DownMap", "lib/MatchProtobufVersion.ts:PB_Main"]
+}

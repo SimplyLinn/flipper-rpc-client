@@ -1,5 +1,5 @@
 import { RpcSerialPort } from '@flipper-rpc-client/core';
-import RpcWebSerialPort from './RpcWebSerialPort';
+import RpcWebSerialPort from './RpcWebSerialPort.js';
 
 const portById = new Map<string, RpcUsbSerialPort>();
 
@@ -58,7 +58,7 @@ export class RpcUsbSerialPort extends RpcWebSerialPort {
   }
 
   async getStreams(): Promise<
-    [readable: ReadableStream<Uint8Array>, WritableStream<Uint8Array>]
+    [readable: ReadableStream<Uint8Array>, writable: WritableStream<Uint8Array>]
   > {
     return new Promise<
       [

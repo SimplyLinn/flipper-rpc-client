@@ -1,0 +1,68 @@
+{
+  "folders": [
+    {
+      "name": "[root]",
+      "path": "."
+    },
+    {
+      "name": "@flipper-rpc-client/core",
+      "path": "packages/core"
+    },
+    {
+      "name": "@flipper-rpc-client/node",
+      "path": "packages/node"
+    },
+    {
+      "name": "@flipper-rpc-client/web",
+      "path": "packages/web"
+    },
+    {
+      "name": "@flipper-rpc-client/versioned-protobuf",
+      "path": "packages/versioned-protobuf"
+    },
+    {
+      "name": "demo:node",
+      "path": "demos/node-demo"
+    },
+    {
+      "name": "demo:web",
+      "path": "demos/web-demo"
+    },
+    {
+      "name": "util:compile-proto",
+      "path": "utils/compile-proto"
+    },
+    {
+      "name": "util:flipper-cli",
+      "path": "utils/flipper-cli"
+    }
+  ],
+  "settings": {
+    "typescript.tsdk": "node_modules\\typescript\\lib",
+    "files.associations": {
+      "turbo.json": "jsonc",
+      "typedoc.*.json": "jsonc",
+      "typedoc.json": "jsonc"
+    },
+    "jest.disabledWorkspaceFolders": [
+      "[root]",
+      "@flipper-rpc-client/versioned-protobuf",
+      "demo:node",
+      "demo:web",
+      "util:compile-proto",
+      "util:flipper-cli"
+    ],
+    "files.exclude": {
+      "**/.history": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "orta.vscode-jest",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "vscode.typescript-language-features",
+      "tlahmann.alex-linter"
+    ]
+  }
+}

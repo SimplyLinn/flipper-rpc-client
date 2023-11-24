@@ -16,6 +16,9 @@
       "import": "./bootstrap.js",
       "require": "./bootstrap.cjs",
       "types": "./bootstrap.d.ts"
+    },
+    "./version-namespace": {
+      "types": "./version-namespace.d.ts"
     }
   },
   "files": [
@@ -33,5 +36,19 @@
   "types": "dist/types/index.d.ts",
   "dependencies": {
     "protobufjs": "7.2.5"
+  },
+  "scripts": {
+    "build-versions": "compile-proto-versions",
+    "build-bootstrap": "compile-proto-bootstrap",
+    "build-index": "compile-proto-index",
+    "build-all": "compile-proto",
+    "lint-eslint": "eslint --ext .js,.ts,.cjs,.cts,.mjs,.mts .",
+    "lint-typescript": "tsc",
+    "lint-language": "alex .",
+    "prettier-check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@flipper-rpc-client/compile-proto": "workspace:*",
+    "long": "5.2.3"
   }
 }

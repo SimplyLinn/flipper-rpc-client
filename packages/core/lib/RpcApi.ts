@@ -1,25 +1,17 @@
-import protobuf from 'protobufjs/minimal.js';
+import type * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
 import {
-  PROTOBUF_VERSIONS,
-  LATEST_VERSION,
-  FIRST_VERSION,
   PROTOBUF_VERSION,
+  loadVersion,
 } from '@flipper-rpc-client/versioned-protobuf';
-import {
-  VersionRange,
-  AllVersionsInRange,
-  ParseVersionRange,
-  DefaultMainParams,
-  ResolveMainCtor,
-  ResolveMain,
-  ResolveOptions,
-} from './Types.js';
-import { ApiInterfaceByVersionMap, apiDefs } from './Commands/index.js';
-import { SUPPORTED_VERSIONS } from './_internal/constants.js';
+import { PatchedMainCtor, Resolve, ResolveOrBootstrap } from './Types.js';
+import { ApiInterfaceByVersionMap, apiDefs } from './Commands.js';
 import RpcSerialPort from './RpcSerialPort.js';
-import { PatchedMainCtor } from './_internal/types.js';
-import matchProtobufVersion from './matchProtobufVersion.js';
-import { appendReaderChunk, ensureError } from './_internal/utils.js';
+import matchProtobufVersion, {
+  makeCreateFunction,
+} from './MatchProtobufVersion.js';
+import { ensureError } from './Utils.js';
+import { CommandError } from './Errors/CommandError.js';
+import { StreamProtobufReader } from './StreamProtobufReader.js';
 
 const MAX_ID = 2 ** 32 - 1;
 
@@ -30,40 +22,6 @@ type FnParamMap<T extends readonly ((...args: any) => any)[]> = {
     ? [This, T[key], ...A]
     : never;
 };
-
-type CreateArgs<
-  Version extends VersionRange,
-  Options,
-  // eslint-disable-next-line @typescript-eslint/ban-types
-> = {} extends ResolveOptions<Version>
-  ? Options extends undefined
-    ? [
-        options?: Options,
-        defaultMainProperties?: {
-          [key in keyof Omit<
-            ResolveOptions<Version>,
-            'commandId' | 'hasNext'
-          >]: ResolveOptions<Version>[key];
-        },
-      ]
-    : [
-        options: Options,
-        defaultMainProperties?: {
-          [key in keyof Omit<
-            ResolveOptions<Version>,
-            'commandId' | 'hasNext'
-          >]: ResolveOptions<Version>[key];
-        },
-      ]
-  : [
-      options: Options,
-      defaultMainProperties: {
-        [key in keyof Omit<
-          ResolveOptions<Version>,
-          'commandId' | 'hasNext'
-        >]: ResolveOptions<Version>[key];
-      },
-    ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function tryAllVoid<const Fns extends readonly ((...args: any[]) => any)[]>(
@@ -94,42 +52,58 @@ function tryAllVoid<const Fns extends readonly ((...args: any[]) => any)[]>(
   }
 }
 
-export interface BaseInFlightRpcCommand<Version extends VersionRange> {
+export interface BaseInFlightRpcCommand<Version extends PROTOBUF_VERSION> {
   isExpected: boolean;
-  reses: ResolveMain<Version>[];
+  reses: Resolve.Main<Version>[];
 }
 
-export interface UnexpectedInFlightRpcCommand<Version extends VersionRange>
+export interface UnexpectedInFlightRpcCommand<Version extends PROTOBUF_VERSION>
   extends BaseInFlightRpcCommand<Version> {
   isExpected: false;
 }
 
-export interface ExpectedInFlightRpcCommand<Version extends VersionRange>
+export interface ExpectedInFlightRpcCommand<Version extends PROTOBUF_VERSION>
   extends BaseInFlightRpcCommand<Version> {
   isExpected: true;
-  command: ResolveMain<Version>;
+  request: [Resolve.Main<Version>, ...Resolve.Main<Version>[]];
   resolve(
-    data: PromiseLike<ResolveMain<Version>[]> | ResolveMain<Version>[],
+    data:
+      | PromiseLike<
+          [Resolve.Main<Version>, ...Resolve.Main<Version>[]] & {
+            request: [
+              InstanceType<Resolve.MainCtor<Version>>,
+              ...InstanceType<Resolve.MainCtor<Version>>[],
+            ];
+          }
+        >
+      | ([Resolve.Main<Version>, ...Resolve.Main<Version>[]] & {
+          request: [
+            InstanceType<Resolve.MainCtor<Version>>,
+            ...InstanceType<Resolve.MainCtor<Version>>[],
+          ];
+        }),
   ): void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   reject(err: any): void;
 }
 
-export type InFlightRpcCommand<Version extends VersionRange> =
+export type InFlightRpcCommand<Version extends PROTOBUF_VERSION> =
   | UnexpectedInFlightRpcCommand<Version>
   | ExpectedInFlightRpcCommand<Version>;
 
-export class RpcApi<Version extends VersionRange> {
+export class RpcApi<Version extends PROTOBUF_VERSION> {
+  #pbModule: Resolve.Version<Version>;
   #Main: PatchedMainCtor<Version>;
   readonly port: RpcSerialPort;
-  #reader = new protobuf.Reader(new Uint8Array(0));
+  #reader: StreamProtobufReader<Resolve.Main<Version>>;
   #id = 1;
   #connected = false;
   #defaultMainProperties: Omit<
-    NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+    NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
     'commandId' | 'hasNext'
   >;
   #commands = new Map<number, InFlightRpcCommand<Version>>();
+  #closingPromise: Promise<void> | undefined;
 
   #nextId() {
     if (this.#id === MAX_ID) {
@@ -142,20 +116,34 @@ export class RpcApi<Version extends VersionRange> {
     return this.port.isConnected;
   }
 
+  get protocolModule() {
+    return this.#pbModule;
+  }
+
   protected constructor(
     port: RpcSerialPort,
-    readonly version: AllVersionsInRange<ParseVersionRange<Version>>,
-    Main: ResolveMainCtor<Version>,
-    matchMode: matchProtobufVersion.Mode,
-    ...[defaultMainProperties]: DefaultMainParams<Version>
+    readonly version: Version,
+    pbModule: Resolve.Version<Version>,
+    readonly matchMode: matchProtobufVersion.Mode,
+    ...[defaultMainProperties]: Resolve.DefaultMainParams<Version>
   ) {
     this.#defaultMainProperties = (defaultMainProperties ?? {}) as Omit<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     >;
-    this.#Main = Main as PatchedMainCtor<Version>;
+    this.#pbModule = pbModule;
+    this.#Main = pbModule.PB.Main as PatchedMainCtor<Version>;
+    this.#reader = new StreamProtobufReader(this.#Main);
     this.port = port;
     this.onData = this.onData.bind(this);
+    if (port.isConnected) {
+      queueMicrotask(() => {
+        this.port.attachConsumer(this.onData, () =>
+          this.setConnectionState(false),
+        );
+        this.setConnectionState(true);
+      });
+    }
   }
 
   #rejectAllInflight(
@@ -189,6 +177,7 @@ export class RpcApi<Version extends VersionRange> {
       return undefined;
     }
     if (this.#connected) {
+      this.#rejectAllInflight(() => new Error('Connection closed'));
       this.#connected = false;
     } else {
       this.#connected = true;
@@ -196,22 +185,28 @@ export class RpcApi<Version extends VersionRange> {
     return this.#connected;
   }
 
-  async #closeAndReset() {
-    try {
-      await this.port.close();
-    } finally {
-      tryAllVoid(
-        [this.port, this.port.detachConsumer, this.onData],
-        [this, () => (this.#reader = new protobuf.Reader(new Uint8Array(0)))],
-        [this, this.#rejectAllInflight, () => new Error('Connection closed')],
-        [this, this.setConnectionState, false],
-      );
+  #closeAndReset() {
+    if (!this.#closingPromise) {
+      this.#closingPromise = (async () => {
+        try {
+          await this.port.close();
+        } finally {
+          tryAllVoid(
+            [this.port, this.port.detachConsumer, this.onData],
+            [this, () => this.#reader.clear()],
+            [this, this.setConnectionState, false],
+          );
+        }
+      })().finally(() => {
+        this.#closingPromise = undefined;
+      });
     }
+    return this.#closingPromise;
   }
 
   protected handleRpcData(
-    res: ResolveMain<Version>,
-  ): ResolveMain<Version>[] | undefined {
+    res: Resolve.Main<Version>,
+  ): Resolve.Main<Version>[] | undefined {
     const commandEntry = this.#commands.get(res.commandId) ?? {
       isExpected: false,
       reses: [],
@@ -225,7 +220,33 @@ export class RpcApi<Version extends VersionRange> {
         }
       }
       if (commandEntry.isExpected) {
-        commandEntry.resolve(commandEntry.reses);
+        if (
+          commandEntry.reses.some(
+            ({ commandStatus }) =>
+              commandStatus !== this.#pbModule.PB.CommandStatus.OK,
+          )
+        ) {
+          commandEntry.reject(
+            new CommandError(
+              this.#pbModule.PB
+                .CommandStatus as ResolveOrBootstrap.Version<Version>['PB']['CommandStatus'],
+              commandEntry.request,
+              commandEntry.reses,
+            ),
+          );
+        } else {
+          commandEntry.resolve(
+            Object.assign(
+              commandEntry.reses as [
+                Resolve.Main<Version>,
+                ...Resolve.Main<Version>[],
+              ],
+              {
+                request: commandEntry.request,
+              },
+            ),
+          );
+        }
       }
       return commandEntry.reses;
     } else if (!this.#commands.has(res.commandId)) {
@@ -235,151 +256,141 @@ export class RpcApi<Version extends VersionRange> {
   }
 
   private onData(chunk: Uint8Array) {
-    appendReaderChunk(this.#reader, chunk);
-    let shouldBreak = false;
-    while (this.#reader.pos < this.#reader.len && !shouldBreak) {
-      try {
-        const res = (() => {
-          const oldPos = this.#reader.pos;
-          try {
-            return this.#Main.decodeDelimited(this.#reader);
-          } catch (err) {
-            shouldBreak = true;
-            this.#reader.pos = oldPos;
-            throw err;
-          }
-        })();
-        this.handleRpcData(res);
-      } catch (err) {
-        if (
-          err instanceof RangeError &&
-          err.message.startsWith('index out of range: ') &&
-          this.#reader.len < 16384
-        ) {
-          return;
-        }
-        const toConsume = this.#reader.buf.slice(this.#reader.pos);
-        console.log(
-          'onData',
-          `[0x${[...toConsume]
-            .map((n) => n.toString(16).padStart(2, '0'))
-            .join(',0x')}]`,
-          String.fromCharCode(...toConsume),
-        );
-        throw err;
-      }
+    this.#reader.append(chunk);
+    let res: Resolve.Main<Version> | null;
+    while ((res = this.#reader.next()) != null) {
+      this.handleRpcData(res);
     }
   }
 
   private enqueue<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     commandName: CMD,
     properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >[],
     mainProperties: Omit<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     >,
   ) {
-    return new Promise<InstanceType<ResolveMainCtor<Version>>[]>(
-      (resolve, reject) => {
-        const lastProps = properties.pop();
-        const commandId = this.#nextId();
-        const rootProps: NonNullable<
-          ConstructorParameters<ResolveMainCtor<Version>>[0]
-        > = {
-          ...mainProperties,
-          commandId,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-        const toWrite = properties.map((props) => {
-          return this.#Main
-            .encodeDelimited({
-              ...rootProps,
-              hasNext: true,
-              [commandName]: props,
-            })
-            .finish();
-        });
-        const command = this.#Main.create({
+    return new Promise<
+      [
+        InstanceType<Resolve.MainCtor<Version>>,
+        ...InstanceType<Resolve.MainCtor<Version>>[],
+      ] & {
+        request: [
+          InstanceType<Resolve.MainCtor<Version>>,
+          ...InstanceType<Resolve.MainCtor<Version>>[],
+        ];
+      }
+    >((resolve, reject) => {
+      const lastProps = properties.pop();
+      const commandId = this.#nextId();
+      const rootProps: NonNullable<
+        ConstructorParameters<Resolve.MainCtor<Version>>[0]
+      > = {
+        ...mainProperties,
+        commandId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+      const request = properties.map((props) =>
+        this.#Main.create({
           ...rootProps,
           hasNext: true,
+          [commandName]: props,
+        }),
+      );
+      request.push(
+        this.#Main.create({
+          ...rootProps,
+          hasNext: false,
           [commandName]: lastProps,
+        }),
+      );
+      this.#commands.set(commandId, {
+        isExpected: true,
+        request: request as [Resolve.Main<Version>, ...Resolve.Main<Version>[]],
+        reses: [],
+        resolve,
+        reject,
+      });
+      try {
+        request.forEach((cmd) => {
+          this.port.write(this.#Main.encodeDelimited(cmd).finish());
         });
-        this.#commands.set(commandId, {
-          isExpected: true,
-          command,
-          reses: [],
-          resolve,
-          reject,
-        });
-        try {
-          toWrite.push(this.#Main.encodeDelimited(command).finish());
-          toWrite.forEach((chunk) => {
-            this.port.write(chunk);
-          });
-        } catch (err) {
-          this.#commands.delete(commandId);
-          reject(err);
-        }
-      },
-    );
+      } catch (err) {
+        this.#commands.delete(commandId);
+        reject(err);
+      }
+    });
   }
 
   rawCommandExt<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     mainProperties: Omit<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     > | null,
     properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >,
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]>;
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  >;
   rawCommandExt<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     mainProperties: Omit<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     > | null,
 
     properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >,
     ...extraProperties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >[]
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]>;
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  >;
   rawCommandExt<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     mainProperties: Omit<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     > | null,
     ...properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >[]
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]> {
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  > {
     return this.enqueue(
       command,
       properties,
@@ -389,45 +400,66 @@ export class RpcApi<Version extends VersionRange> {
 
   rawCommand<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >,
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]>;
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  >;
   rawCommand<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >,
     ...extraProperties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >[]
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]>;
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  >;
   rawCommand<
     const CMD extends NonNullable<
-      InstanceType<ResolveMainCtor<Version>>['content']
+      InstanceType<Resolve.MainCtor<Version>>['content']
     > &
-      keyof NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>,
+      keyof NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
   >(
     command: CMD,
     ...properties: NonNullable<
-      NonNullable<ConstructorParameters<ResolveMainCtor<Version>>[0]>[CMD]
+      NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>[CMD]
     >[]
-  ): Promise<InstanceType<ResolveMainCtor<Version>>[]> {
+  ): Promise<
+    InstanceType<Resolve.MainCtor<Version>>[] & {
+      request: InstanceType<Resolve.MainCtor<Version>>[];
+    }
+  > {
     return this.enqueue(command, properties, this.#defaultMainProperties);
   }
 
   async connect() {
-    this.port.attachConsumer(this.onData);
+    if (this.#connected) {
+      return this;
+    }
+    this.port.attachConsumer(this.onData, () => {
+      this.setConnectionState(false);
+    });
+    if (this.port.isConnected) {
+      this.setConnectionState(true);
+      return this;
+    }
     try {
       await this.port.open();
       this.setConnectionState(true);
@@ -438,12 +470,15 @@ export class RpcApi<Version extends VersionRange> {
     }
   }
 
+  async disconnect() {
+    if (!this.#connected) {
+      return;
+    }
+    return this.#closeAndReset();
+  }
+
   get cmds(): {
-    [key in keyof ApiInterfaceByVersionMap[AllVersionsInRange<
-      ParseVersionRange<Version>
-    >]]: ApiInterfaceByVersionMap[AllVersionsInRange<
-      ParseVersionRange<Version>
-    >][key];
+    [key in keyof ApiInterfaceByVersionMap[Version]]: ApiInterfaceByVersionMap[Version][key];
   } {
     if (this === RpcApi.prototype || !(this instanceof RpcApi)) {
       throw new TypeError(
@@ -453,32 +488,25 @@ export class RpcApi<Version extends VersionRange> {
       );
     }
     const { version } = this;
-    const cmds = Object.fromEntries(
+    const cmds: ApiInterfaceByVersionMap[Version] = Object.fromEntries(
       apiDefs
-        .filter((f) => {
-          const versionRange = f[SUPPORTED_VERSIONS] as VersionRange;
-          if (typeof versionRange === 'string') {
-            return versionRange === version;
+        .map(([key, fns]) => {
+          const suppertedImpl = (
+            fns as readonly (readonly [
+              // eslint-disable-next-line @typescript-eslint/ban-types
+              Function,
+              readonly PROTOBUF_VERSION[],
+            ])[]
+          ).find(([, supportedVersions]) =>
+            supportedVersions.includes(version),
+          )?.[0] as (typeof fns)[number][0] | undefined;
+          if (suppertedImpl == null) {
+            return null;
           }
-          const targetIndex = PROTOBUF_VERSIONS.indexOf(version);
-          if (targetIndex < 0) {
-            return false;
-          }
-          const minIndex = PROTOBUF_VERSIONS.indexOf(versionRange[0]);
-          const maxIndex = PROTOBUF_VERSIONS.indexOf(
-            versionRange[2] ?? LATEST_VERSION,
-          );
-          if (minIndex < 0 || maxIndex < 0) {
-            return false;
-          }
-          return targetIndex >= minIndex && targetIndex <= maxIndex;
+          return [key, suppertedImpl.bind(this)] as const;
         })
-        .flatMap((f) =>
-          Object.entries(f).map(([key, val]) => [key, val.bind(this)] as const),
-        ),
-    ) as ApiInterfaceByVersionMap[AllVersionsInRange<
-      ParseVersionRange<Version>
-    >];
+        .filter((f): f is NonNullable<typeof f> => f != null),
+    ) as ApiInterfaceByVersionMap[Version];
     Object.defineProperty(this, 'cmds', {
       value: cmds,
       writable: true,
@@ -488,95 +516,47 @@ export class RpcApi<Version extends VersionRange> {
     return cmds;
   }
 
-  static async create(
+  static create = makeCreateFunction<RpcSerialPort, typeof RpcApi>(RpcApi);
+
+  static async instantiate<Version extends PROTOBUF_VERSION>(
     port: RpcSerialPort,
-    ...[options, defaultMainProperties]: CreateArgs<
-      [FIRST_VERSION, '...', LATEST_VERSION],
-      null | undefined
-    >
-  ): Promise<RpcApi<[FIRST_VERSION, '...', LATEST_VERSION]>>;
-  static async create<const Version extends PROTOBUF_VERSION>(
-    port: RpcSerialPort,
-    ...[options, defaultMainProperties]: CreateArgs<
-      Version,
-      | { version: Version; force?: boolean }
-      | { version: Version; requireExactMatch?: boolean }
-    >
+    version: Version,
+    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
   ): Promise<RpcApi<Version>>;
-  static async create<const MinV extends PROTOBUF_VERSION>(
+  static async instantiate<Version extends PROTOBUF_VERSION>(
     port: RpcSerialPort,
-    ...[options, defaultMainProperties]: CreateArgs<
-      [MinV, '...', LATEST_VERSION],
-      | { minVersion: MinV; requireExactMatch?: boolean }
-      | {
-          minVersion: MinV;
-          fallbackVersion?: AllVersionsInRange<[MinV, '...', LATEST_VERSION]>;
-        }
-    >
-  ): Promise<RpcApi<[MinV, '...', LATEST_VERSION]>>;
-  static async create<const MaxV extends PROTOBUF_VERSION>(
+    version: Version,
+    matchMode: matchProtobufVersion.Mode,
+    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
+  ): Promise<RpcApi<Version>>;
+  static async instantiate<Version extends PROTOBUF_VERSION>(
     port: RpcSerialPort,
-    ...[options, defaultMainProperties]: CreateArgs<
-      [FIRST_VERSION, '...', MaxV],
-      | { maxVersion: MaxV; requireExactMatch?: boolean }
-      | {
-          maxVersion: MaxV;
-          fallbackVersion?: AllVersionsInRange<[FIRST_VERSION, '...', MaxV]>;
-        }
-    >
-  ): Promise<RpcApi<[FIRST_VERSION, '...', MaxV]>>;
-  static async create<
-    const MinV extends PROTOBUF_VERSION,
-    const MaxV extends PROTOBUF_VERSION,
-  >(
-    port: RpcSerialPort,
-    ...[options, defaultMainProperties]: CreateArgs<
-      [MinV, '...', MaxV],
-      | { minVersion: MinV; maxVersion: MaxV; requireExactMatch?: boolean }
-      | {
-          maxVersion: MaxV;
-          fallbackVersion?: AllVersionsInRange<[MinV, '...', MaxV]>;
-        }
-    >
-  ): Promise<RpcApi<[MinV, '...', MaxV]>>;
-  static async create(
-    port: RpcSerialPort,
-    ...[options, ...defaultMainProperties]: CreateArgs<
-      [FIRST_VERSION, '...', LATEST_VERSION],
-      | {
-          requireExactMatch?: boolean;
-          fallbackVersion?: PROTOBUF_VERSION;
-        }
-      | null
-      | undefined
-    >
-  ): Promise<RpcApi<[FIRST_VERSION, '...', LATEST_VERSION]>>;
-  static async create(
-    port: RpcSerialPort,
-    ...[options, ...defaultMainProperties]: CreateArgs<
-      [FIRST_VERSION, '...', LATEST_VERSION],
-      | { version: PROTOBUF_VERSION; force?: boolean }
-      | { version: PROTOBUF_VERSION; requireExactMatch?: boolean }
-      | {
-          minVersion?: PROTOBUF_VERSION;
-          maxVersion?: PROTOBUF_VERSION;
-          requireExactMatch?: boolean;
-          fallbackVersion?: PROTOBUF_VERSION;
-        }
-      | null
-      | undefined
-    >
-  ): Promise<RpcApi<[FIRST_VERSION, '...', LATEST_VERSION]>> {
-    const { version, protobuf, matchMode } = await matchProtobufVersion(
-      port,
-      options,
-    );
-    return new RpcApi<[FIRST_VERSION, '...', LATEST_VERSION]>(
+    version: Version,
+    ...[matchMode, ...defaultMainProperties]:
+      | Resolve.DefaultMainParams<Version>
+      | [
+          matchMode: matchProtobufVersion.Mode,
+          ...defaultMainProperties: Resolve.DefaultMainParams<Version>,
+        ]
+  ): Promise<RpcApi<Version>> {
+    const pbModule = (await loadVersion(version)) as Resolve.Version<Version>;
+    if (typeof matchMode === 'object' || matchMode == null) {
+      return new RpcApi(
+        port,
+        version,
+        pbModule,
+        matchProtobufVersion.Mode.FORCED,
+        ...((matchMode != null
+          ? [matchMode]
+          : []) as Resolve.DefaultMainParams<Version>),
+      );
+    }
+    return new RpcApi(
       port,
       version,
-      protobuf.PB.Main,
+      pbModule,
       matchMode,
-      ...defaultMainProperties,
+      ...(defaultMainProperties as Resolve.DefaultMainParams<Version>),
     );
   }
 }

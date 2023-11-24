@@ -1,0 +1,69 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".eslintignore",
+    ".eslintrc",
+    ".prettierignore",
+    ".prettierrc",
+    "pnpm-workspace.yaml"
+  ],
+  "pipeline": {
+    "build:types": {
+      "dependsOn": [
+        "@flipper-rpc-client/versioned-protobuf#build",
+        "^build:types"
+      ],
+      "outputs": ["dist/types/**"],
+      "inputs": ["lib/**", "*.json"],
+      "outputMode": "new-only"
+    },
+    "build:esm": {
+      "dependsOn": [
+        "@flipper-rpc-client/versioned-protobuf#build",
+        "build:types",
+        "^build:esm"
+      ],
+      "outputs": ["dist/esm/**"],
+      "inputs": ["lib/**", "*.json"],
+      "outputMode": "new-only"
+    },
+    "build:cjs": {
+      "dependsOn": [
+        "@flipper-rpc-client/versioned-protobuf#build",
+        "build:types",
+        "^build:cjs"
+      ],
+      "outputs": ["dist/cjs/**"],
+      "inputs": ["lib/**", "*.json"],
+      "outputMode": "new-only"
+    },
+    "build": {
+      // A package's `build` script depends on that package's
+      // dependencies and devDependencies
+      // `build` tasks  being completed first
+      // (the `^` symbol signifies `upstream`).
+      "dependsOn": ["^build", "build:esm", "build:cjs", "build:types"],
+      "outputMode": "new-only"
+    },
+    "prettier-check": {
+      "outputMode": "new-only"
+    },
+    "lint-eslint": {
+      "outputMode": "new-only"
+    },
+    "typescript": {
+      "outputMode": "new-only",
+      "dependsOn": ["build:types"]
+    },
+    "lint": {
+      "dependsOn": ["typescript", "lint-eslint", "prettier-check"]
+    },
+    "lint-no-typescript": {
+      "dependsOn": ["lint-eslint", "prettier-check"]
+    },
+    "test": {
+      "outputMode": "new-only",
+      "dependsOn": ["build", "lint"]
+    }
+  }
+}

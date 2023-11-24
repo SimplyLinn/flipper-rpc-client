@@ -1,0 +1,9 @@
+{
+  "extends": ["../../typedoc.base.json"],
+  "entryPoints": [
+    "index.d.ts",
+    "version-namespace.d.ts",
+    "bootstrap.d.ts",
+    "v/*/index.d.ts",
+  ]
+}

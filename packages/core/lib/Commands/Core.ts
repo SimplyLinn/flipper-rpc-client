@@ -1,15 +1,8 @@
-import { SUPPORTED_VERSIONS } from '../_internal/constants.js';
-import { mkFns } from '../_internal/utils.js';
+import type * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
+import { cmd } from '../_internal/cmdFactory.js';
 
-const CoreApi = mkFns([
-  {
-    [SUPPORTED_VERSIONS]: ['0.5', '...'],
-    async stopSession(): Promise<unknown> {
-      const reses = await this.rawCommand('stopSession', {});
-      console.log(reses);
-      return reses;
-    },
-  },
-]);
-
-export { CoreApi };
+export const stopSession = cmd.v0_1.andUp(async function () {
+  const reses = await this.rawCommand('stopSession', {});
+  console.log(reses);
+  return reses;
+});

@@ -1,9 +1,9 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "moduleResolution": "Node16",
-    "module": "Node16",
-    "typeRoots": ["node_modules/@types", "./types"],
+    "module": "Node16"
   },
-  "exclude": ["node_modules", "../../node_modules"]
+  "include": ["index.d.ts", "bootstrap.d.ts", "version-namespace.d.ts"],
+  "exclude": ["**/node_modules"]
 }

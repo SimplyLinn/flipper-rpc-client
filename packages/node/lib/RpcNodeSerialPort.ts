@@ -56,22 +56,22 @@ interface Emitter extends EventEmitter {
   eventNames(): (keyof EventMap)[];
 }
 
-abstract class RpcApiEventEmitter extends RpcSerialPort implements Emitter {
+abstract class RpcNodeSerialEventEmitter
+  extends RpcSerialPort
+  implements Emitter
+{
   #emitter: Emitter;
   constructor(...args: []) {
     super(...args);
     this.#emitter = new EventEmitter() as Emitter;
     if (EventEmitter.captureRejectionSymbol in this.#emitter) {
-      Object.assign(this, {
-        [EventEmitter.captureRejectionSymbol](
-          this: RpcApiEventEmitter,
-          ...args: Parameters<
-            NonNullable<Emitter[typeof EventEmitter.captureRejectionSymbol]>
-          >
-        ) {
-          this.#emitter[EventEmitter.captureRejectionSymbol]?.(...args);
-        },
-      });
+      this[EventEmitter.captureRejectionSymbol] = function (
+        ...args: Parameters<
+          NonNullable<Emitter[typeof EventEmitter.captureRejectionSymbol]>
+        >
+      ) {
+        this.#emitter[EventEmitter.captureRejectionSymbol]!(...args);
+      };
     }
   }
 
@@ -163,12 +163,15 @@ abstract class RpcApiEventEmitter extends RpcSerialPort implements Emitter {
   }
 }
 
-abstract class RpcNodeSerialPort extends RpcApiEventEmitter {
+abstract class RpcNodeSerialPort extends RpcNodeSerialEventEmitter {
   #stream: Duplex | null = null;
 
   constructor() {
     super();
+    this.onData = this.pushData.bind(this);
   }
+
+  onData: (data: Uint8Array) => void;
 
   abstract getStream(): Promise<Duplex> | Duplex;
 
@@ -186,10 +189,8 @@ abstract class RpcNodeSerialPort extends RpcApiEventEmitter {
     if (this.#stream != null) {
       throw new Error('Data stream already initialized');
     }
-    const stream = await this.getStream();
-    stream.on('data', (chunk: Buffer) => {
-      this.pushData(chunk);
-    });
+    this.#stream = await this.getStream();
+    this.#stream.on('data', this.onData);
   }
 
   protected async doOpen() {
@@ -216,6 +217,7 @@ abstract class RpcNodeSerialPort extends RpcApiEventEmitter {
       if (this.#stream) {
         const writer = this.#stream;
         this.#stream = null;
+        writer.off('data', this.onData);
         writer.destroy();
       }
     } finally {

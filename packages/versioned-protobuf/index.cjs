@@ -22,10 +22,12 @@ const PROTOBUF_VERSIONS = [
   '0.21',
 ];
 function loadVersion(version) {
-  return import(
-    /* webpackChunkName: "protobuf-version" */
-    /* webpackMode: "lazy-once" */
-    `./v/${version}/index.js`
+  return Promise.resolve(
+    require(
+      /* webpackChunkName: "protobuf-version" */
+      /* webpackMode: "lazy-once" */
+      `./v/${version}/index.cjs`,
+    ),
   );
 }
 const FIRST_VERSION = '0.1';

@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "jest"],
+    "typeRoots": ["../node_modules/@types", "../../../node_modules/@types"],
+    "rootDir": "../../..",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@": ["../lib/index.d.ts"],
+      "@/*": ["../lib/*"],
+      "@mocks/*": ["./__MOCKS__/*"],
+    }
+  },
+  "include": ["./unit", "utils.ts", "../lib"],
+}

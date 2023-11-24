@@ -4,18 +4,17 @@ import {
   AllVersionsInRange,
   ParseVersionRange,
   DefaultMainParams,
-  ResolveMainCtor,
   ResolveOptions,
   matchProtobufVersion,
   ResolveMain,
-} from '@flipper-rpc-client/core';
-import EventEmitter from 'events';
-import {
+  ResolveVersion,
+  ScreenFrame,
   FIRST_VERSION,
   LATEST_VERSION,
   PROTOBUF_VERSION,
-} from '@flipper-rpc-client/versioned-protobuf';
-import RpcNodeSerialPort from './RpcNodeSerialPort';
+} from '@flipper-rpc-client/core';
+import EventEmitter from 'events';
+import RpcNodeSerialPort from './RpcNodeSerialPort.js';
 
 interface EventMap<Version extends VersionRange> {
   connect: [];
@@ -24,6 +23,7 @@ interface EventMap<Version extends VersionRange> {
   rpcMessage: [messages: ResolveMain<Version>[]];
   rpcReceived: [messages: ResolveMain<Version>[]];
   rpcPartialReceived: [message: ResolveMain<Version>];
+  guiScreenFrame: [frame: ScreenFrame];
 }
 
 interface Emitter<Version extends VersionRange> extends EventEmitter {
@@ -84,7 +84,7 @@ abstract class RpcApiEventEmitter<Version extends VersionRange>
     ...args: [
       port: RpcNodeSerialPort,
       version: AllVersionsInRange<ParseVersionRange<Version>>,
-      Main: ResolveMainCtor<Version>,
+      pbModule: ResolveVersion<Version>,
       matchMode: matchProtobufVersion.Mode,
       ...defaultMainProperties: DefaultMainParams<Version>,
     ]
@@ -92,18 +92,15 @@ abstract class RpcApiEventEmitter<Version extends VersionRange>
     super(...args);
     this.#emitter = new EventEmitter() as Emitter<Version>;
     if (EventEmitter.captureRejectionSymbol in this.#emitter) {
-      Object.assign(this, {
-        [EventEmitter.captureRejectionSymbol](
-          this: RpcApiEventEmitter<Version>,
-          ...args: Parameters<
-            NonNullable<
-              Emitter<Version>[typeof EventEmitter.captureRejectionSymbol]
-            >
+      this[EventEmitter.captureRejectionSymbol] = function (
+        ...args: Parameters<
+          NonNullable<
+            Emitter<Version>[typeof EventEmitter.captureRejectionSymbol]
           >
-        ) {
-          this.#emitter[EventEmitter.captureRejectionSymbol]?.(...args);
-        },
-      });
+        >
+      ) {
+        this.#emitter[EventEmitter.captureRejectionSymbol]!(...args);
+      };
     }
   }
 
@@ -258,11 +255,11 @@ class RpcApiNode<
   private constructor(
     port: RpcNodeSerialPort,
     version: AllVersionsInRange<ParseVersionRange<Version>>,
-    Main: ResolveMainCtor<Version>,
+    pbModule: ResolveVersion<Version>,
     matchMode: matchProtobufVersion.Mode,
     ...defaultMainProperties: DefaultMainParams<Version>
   ) {
-    super(port, version, Main, matchMode, ...defaultMainProperties);
+    super(port, version, pbModule, matchMode, ...defaultMainProperties);
   }
 
   protected setConnectionState(connected: boolean) {
@@ -282,6 +279,9 @@ class RpcApiNode<
       this.emit('rpcReceived', maybeReses);
       if (res.commandId === 0) {
         this.emit('rpcMessage', maybeReses);
+        if (res.content === 'guiScreenFrame') {
+          this.emit('guiScreenFrame', ScreenFrame.fromMessages(maybeReses));
+        }
       } else {
         this.emit('rpcCommandResponse', maybeReses);
       }
@@ -375,7 +375,7 @@ class RpcApiNode<
     return new RpcApiNode<[FIRST_VERSION, '...', LATEST_VERSION]>(
       port,
       version,
-      protobuf.PB.Main,
+      protobuf,
       matchMode,
       ...defaultMainProperties,
     );

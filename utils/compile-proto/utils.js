@@ -6,6 +6,15 @@ import pbjs from 'protobufjs-cli/pbjs.js';
 import fs from 'node:fs/promises';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import prettier from 'prettier';
+
+export async function doPrettier(data, filePath) {
+  const config = await prettier.resolveConfig(filePath);
+  return prettier.format(data, {
+    ...config,
+    filepath: filePath,
+  });
+}
 
 const validVersionRegex =
   /^(?:[1-9]\d*|0)\.(?:[1-9]\d*|0)(?:\.(?:[1-9]\d*|0)(?:[-_.].*)?)?(?:[-_].*)?$/;
@@ -32,13 +41,16 @@ if ('root' in argv && typeof argv.root !== 'string') {
 
 export const OUTPUT_ROOT =
   typeof argv.root !== 'string'
-    ? path.resolve(process.cwd(), 'proto-compiled')
+    ? process.cwd()
     : path.resolve(process.cwd(), argv.root);
 
 export const VERSIONS_DIR = path.join(OUTPUT_ROOT, 'v');
 
-// Init the git submodule stuff
-await (async () => {
+/**
+ * @param {string[]} [extraTags]
+ */
+export async function* loadTags(extraTags) {
+  // Init the git submodule stuff
   let fetchError;
   await Loader('Initializing git submodule', () =>
     runCmd('git', ['submodule', 'init', 'flipperzero-protobuf']).then(() =>
@@ -89,12 +101,6 @@ await (async () => {
       process.exit(1);
     },
   );
-})();
-
-/**
- * @param {string[]} [extraTags]
- */
-export async function* loadTags(extraTags) {
   const [tagMap, tagsToFetch] = await Loader('Getting git tags', async () => {
     await runCmd(
       'git',
@@ -486,7 +492,7 @@ export async function needsCompile(tagCommit, outDir) {
 /**
  * @param {string[]} versions
  */
-export function makeProtobufVersions(versions) {
+export function makeProtobufIndex(versions) {
   const escapedVersions = versions.map((v) =>
     JSON.stringify(v).trim().replace(/^"|"$/g, ''),
   );
@@ -532,10 +538,12 @@ export function isValidVersion(version) {
 `;
   const cjs = `const PROTOBUF_VERSIONS = ["${escapedVersions.join('","')}"];
 function loadVersion(version) {
-  return import(
-    /* webpackChunkName: "protobuf-version" */
-    /* webpackMode: "lazy-once" */
-    \`./v/\${version}/index.js\`
+  return Promise.resolve(
+    require(
+      /* webpackChunkName: "protobuf-version" */
+      /* webpackMode: "lazy-once" */
+      \`./v/\${version}/index.cjs\`,
+    ),
   );
 }
 const FIRST_VERSION = "${escapedVersions[0]}";
@@ -551,7 +559,16 @@ module.exports = {
   isValidVersion,
 };
 `;
-  return { tsDef, esm, cjs };
+  const namespaceDef = escapedVersions
+    .map(
+      (v) =>
+        `export type * as v${v.replace(
+          /[^a-zA-Z0-9_$]/g,
+          '_',
+        )} from './v/${v}/index.d.ts';`,
+    )
+    .join('\n');
+  return { tsDef, esm, cjs, namespaceDef };
 }
 
 /**
@@ -610,7 +627,10 @@ export function runCmd(cmd, args, stdin, cwd = process.cwd()) {
               cwd,
               args,
               code,
-              output,
+              output: output.map(([buffer, data]) => [
+                buffer,
+                data.toString('utf8'),
+              ]),
             }),
           );
         }
@@ -771,6 +791,7 @@ export function pbtsMain(args, stdin) {
         ],
         {
           stdio: ['pipe', 'pipe', 'pipe'],
+          cwd: __dirname,
         },
       );
       let output = '';

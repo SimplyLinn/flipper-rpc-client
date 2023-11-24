@@ -36,6 +36,10 @@ class RpcUsbSerialPort extends RpcNodeSerialPort {
         doOpen();
       });
     }
+    this.#base.on('close', () => {
+      this._state = RpcSerialPort.State.DISCONNECTED;
+      this.detachConsumer();
+    });
   }
 
   async getStream(): Promise<Duplex> {

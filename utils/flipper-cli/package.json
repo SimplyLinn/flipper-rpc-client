@@ -1,0 +1,10 @@
+{
+    "name": "@flipper-rpc-client/flipper-cli",
+    "type": "module",
+    "dependencies": {
+        "@flipper-rpc-client/core": "workspace:*",
+        "@flipper-rpc-client/node": "workspace:*",
+        "protobufjs": "7.2.5",
+        "serialport": "12.0.0"
+    }
+}

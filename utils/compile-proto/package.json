@@ -2,7 +2,10 @@
     "name": "@flipper-rpc-client/compile-proto",
     "type": "module",
     "bin": {
-        "compile-proto": "index.js"
+        "compile-proto": "all.js",
+        "compile-proto-versions": "versions.js",
+        "compile-proto-bootstrap": "bootstrap.js",
+        "compile-proto-index": "index.js"
     },
     "dependencies": {
         "@typescript-eslint/eslint-plugin": "6.12.0",

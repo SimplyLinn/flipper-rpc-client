@@ -2,7 +2,9 @@
   "npmClient": "pnpm",
   "useWorkspaces": true,
   "packages": [
-    "packages/*"
+    "packages/*",
+    "demos/*",
+    "utils/*"
   ],
   "command": {
     "version": {

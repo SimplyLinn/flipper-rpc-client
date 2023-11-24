@@ -1,4 +1,4 @@
-abstract class RpcSerialPort {
+export abstract class RpcSerialPort {
   name?: string;
   protected _state: RpcSerialPort.State = RpcSerialPort.State.DISCONNECTED;
   protected connectionPromise: Promise<void> = Promise.resolve();
@@ -115,12 +115,14 @@ abstract class RpcSerialPort {
       await this.connectionPromise;
       return this.close();
     }
-    await (this.connectionPromise = this.doClose());
+    await (this.connectionPromise = this.doClose()).finally(() => {
+      this.detachConsumer();
+    });
   }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-namespace
-namespace RpcSerialPort {
+export namespace RpcSerialPort {
   export enum State {
     DISCONNECTING = 'Disconnecting',
     DISCONNECTED = 'Disconnected',

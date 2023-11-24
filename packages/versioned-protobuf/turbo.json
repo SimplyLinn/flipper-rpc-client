@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "pipeline": {
+    "build-versions": {
+      // We cannot cache this task because it depends on the
+      // upstream git repo's tags. However, it's very fast
+      // if nothing has changed.
+      "cache": false,
+      "outputs": ["v/**"]
+    },
+    "build-bootstrap": {
+      "outputs": ["bootstrap.*"],
+      "inputs": [
+        "flipperzero-bootstrap/**/*",
+        ".eslintrc",
+        "tsconfig.json",
+        "package.json"
+      ],
+      "outputMode": "new-only"
+    },
+    "build-index": {
+      "dependsOn": ["build-versions", "build-bootstrap"],
+      "inputs": [
+        ".eslintrc",
+        "tsconfig.json",
+        "package.json",
+        "v/**",
+        "bootstrap.*"
+      ],
+      "outputs": ["index.*", "version-namespace.*"],
+      "outputMode": "new-only"
+    },
+    "build": {
+      "dependsOn": ["build-index"]
+    }
+  }
+}

@@ -4,218 +4,126 @@ import {
   AllVersionsInRange,
   ParseVersionRange,
   DefaultMainParams,
-  ResolveMainCtor,
   ResolveOptions,
   matchProtobufVersion,
   ResolveMain,
-} from '@flipper-rpc-client/core';
-import EventEmitter from 'events';
-import {
   FIRST_VERSION,
   LATEST_VERSION,
   PROTOBUF_VERSION,
-} from '@flipper-rpc-client/versioned-protobuf';
-import RpcWebSerialPort from 'RpcWebSerialPort';
+  ResolveVersion,
+  ScreenFrame,
+} from '@flipper-rpc-client/core';
+import RpcWebSerialPort from './RpcWebSerialPort.js';
+import RpcApiWebEvent from './RtcApiWebEvent.js';
 
-interface EventMap<Version extends VersionRange> {
-  connect: [];
-  disconnect: [];
-  rpcCommandResponse: [messagess: ResolveMain<Version>[]];
-  rpcMessage: [messages: ResolveMain<Version>[]];
-  rpcReceived: [messages: ResolveMain<Version>[]];
-  rpcPartialReceived: [message: ResolveMain<Version>];
-}
-
-interface Emitter<Version extends VersionRange> extends EventEmitter {
-  addListener<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  on<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  once<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  removeListener<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  off<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  removeAllListeners(event?: keyof EventMap<Version>): this;
-  setMaxListeners(n: number): this;
-  getMaxListeners(): number;
-  listeners<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-  ): ((...args: EventMap<Version>[Event]) => void)[];
-  rawListeners<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-  ): ((...args: EventMap<Version>[Event]) => void)[];
-  emit<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    ...args: EventMap<Version>[Event]
-  ): boolean;
-  listenerCount<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener?: (...args: EventMap<Version>[Event]) => void,
-  ): number;
-  prependListener<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  prependOnceListener<Event extends keyof EventMap<Version>>(
-    eventName: Event,
-    listener: (...args: EventMap<Version>[Event]) => void,
-  ): this;
-  eventNames(): (keyof EventMap<Version>)[];
-}
-
-class RpcApiEventEmitter<Version extends VersionRange>
+class RpcApiWebEventEmitter<Version extends VersionRange>
   extends RpcApi<Version>
-  implements Emitter<Version>
+  implements EventTarget
 {
-  #emitter: Emitter<Version>;
   constructor(
     ...args: [
       port: RpcWebSerialPort,
       version: AllVersionsInRange<ParseVersionRange<Version>>,
-      Main: ResolveMainCtor<Version>,
+      pbModule: ResolveVersion<Version>,
       matchMode: matchProtobufVersion.Mode,
       ...defaultMainProperties: DefaultMainParams<Version>,
     ]
   ) {
     super(...args);
-    this.#emitter = new EventEmitter() as Emitter<Version>;
-    if (EventEmitter.captureRejectionSymbol in this.#emitter) {
-      Object.assign(this, {
-        [EventEmitter.captureRejectionSymbol](
-          this: RpcApiEventEmitter<Version>,
-          ...args: Parameters<
-            NonNullable<
-              Emitter<Version>[typeof EventEmitter.captureRejectionSymbol]
-            >
-          >
-        ) {
-          this.#emitter[EventEmitter.captureRejectionSymbol]?.(...args);
-        },
-      });
+    const eventTarget = new EventTarget();
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    function addEventListener<
+      const Type extends RpcApiWebEvent.AnyEvent<Version>['type'],
+    >(
+      type: Type,
+      callback:
+        | ((evt: RpcApiWebEvent.EventMap<Version>[Type]) => void)
+        | {
+            handleEvent(object: RpcApiWebEvent.EventMap<Version>[Type]): void;
+          }
+        | null,
+      options?: boolean | AddEventListenerOptions | undefined,
+    ): void;
+    function addEventListener(
+      this: RpcApiWebEventEmitter<Version> | EventTarget,
+      ...args: [
+        type: string,
+        callback: EventListenerOrEventListenerObject | null,
+        options?: boolean | AddEventListenerOptions | undefined,
+      ]
+    ) {
+      return eventTarget.addEventListener.call(
+        this === self ? eventTarget : this,
+        ...args,
+      );
     }
+    this.addEventListener = addEventListener;
+    function dispatchEvent(
+      this: RpcApiWebEventEmitter<Version> | EventTarget,
+      ...args: [event: Event]
+    ) {
+      return eventTarget.dispatchEvent.call(
+        this === self ? eventTarget : this,
+        ...args,
+      );
+    }
+    this.dispatchEvent = dispatchEvent;
+    function removeEventListener<
+      const Type extends RpcApiWebEvent.AnyEvent<Version>['type'],
+    >(
+      type: Type,
+      callback:
+        | ((evt: RpcApiWebEvent.EventMap<Version>[Type]) => void)
+        | {
+            handleEvent(object: RpcApiWebEvent.EventMap<Version>[Type]): void;
+          }
+        | null,
+      options?: boolean | EventListenerOptions | undefined,
+    ): void;
+    function removeEventListener(
+      this: RpcApiWebEventEmitter<Version> | EventTarget,
+      ...args: [
+        type: string,
+        callback: EventListenerOrEventListenerObject | null,
+        options?: boolean | EventListenerOptions | undefined,
+      ]
+    ) {
+      return eventTarget.removeEventListener.call(
+        this === self ? eventTarget : this,
+        ...args,
+      );
+    }
+    this.removeEventListener = removeEventListener;
   }
 
-  [EventEmitter.captureRejectionSymbol]?(
-    error: Error,
-    event: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...args: any[]
-  ): void;
+  addEventListener: <
+    const Type extends RpcApiWebEvent.AnyEvent<Version>['type'],
+  >(
+    type: Type,
+    callback:
+      | ((evt: RpcApiWebEvent.EventMap<Version>[Type]) => void)
+      | {
+          handleEvent(object: RpcApiWebEvent.EventMap<Version>[Type]): void;
+        }
+      | null,
+    options?: boolean | AddEventListenerOptions | undefined,
+  ) => void;
 
-  addListener<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.addListener(...args);
-    return this;
-  }
-  on<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.on(...args);
-    return this;
-  }
-  once<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.once(...args);
-    return this;
-  }
-  removeListener<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.removeListener(...args);
-    return this;
-  }
-  off<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.off(...args);
-    return this;
-  }
-  removeAllListeners(
-    ...args: [event?: keyof EventMap<Version> | undefined]
-  ): this {
-    this.#emitter.removeAllListeners(...args);
-    return this;
-  }
-  setMaxListeners(...args: [n: number]): this {
-    this.#emitter.setMaxListeners(...args);
-    return this;
-  }
-  getMaxListeners(...args: []): number {
-    return this.#emitter.getMaxListeners(...args);
-  }
-  listeners<Event extends keyof EventMap<Version>>(
-    ...args: [eventName: Event]
-  ): ((...args: EventMap<Version>[Event]) => void)[] {
-    return this.#emitter.listeners(...args);
-  }
-  rawListeners<Event extends keyof EventMap<Version>>(
-    ...args: [eventName: Event]
-  ): ((...args: EventMap<Version>[Event]) => void)[] {
-    return this.#emitter.rawListeners(...args);
-  }
-  emit<Event extends keyof EventMap<Version>>(
-    ...args: [eventName: Event, ...args: EventMap<Version>[Event]]
-  ): boolean {
-    return this.#emitter.emit(...args);
-  }
-  listenerCount<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener?: ((...args: EventMap<Version>[Event]) => void) | undefined,
-    ]
-  ): number {
-    return this.#emitter.listenerCount(...args);
-  }
-  prependListener<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.prependListener(...args);
-    return this;
-  }
-  prependOnceListener<Event extends keyof EventMap<Version>>(
-    ...args: [
-      eventName: Event,
-      listener: (...args: EventMap<Version>[Event]) => void,
-    ]
-  ): this {
-    this.#emitter.prependOnceListener(...args);
-    return this;
-  }
-  eventNames(...args: []): (keyof EventMap<Version>)[] {
-    return this.#emitter.eventNames(...args);
-  }
+  dispatchEvent: (event: RpcApiWebEvent.AnyEvent<Version>) => boolean;
+
+  removeEventListener: <
+    const Type extends RpcApiWebEvent.AnyEvent<Version>['type'],
+  >(
+    type: Type,
+    callback:
+      | ((evt: RpcApiWebEvent.EventMap<Version>[Type]) => void)
+      | {
+          handleEvent(object: RpcApiWebEvent.EventMap<Version>[Type]): void;
+        }
+      | null,
+    options?: boolean | EventListenerOptions | undefined,
+  ) => void;
 }
 
 type CreateArgs<
@@ -252,38 +160,57 @@ type CreateArgs<
       },
     ];
 
-export class RpcApiNode<
+class RpcApiWeb<
   Version extends VersionRange,
-> extends RpcApiEventEmitter<Version> {
+> extends RpcApiWebEventEmitter<Version> {
   private constructor(
     port: RpcWebSerialPort,
     version: AllVersionsInRange<ParseVersionRange<Version>>,
-    Main: ResolveMainCtor<Version>,
+    pbModule: ResolveVersion<Version>,
     matchMode: matchProtobufVersion.Mode,
     ...defaultMainProperties: DefaultMainParams<Version>
   ) {
-    super(port, version, Main, matchMode, ...defaultMainProperties);
+    super(port, version, pbModule, matchMode, ...defaultMainProperties);
   }
-
+  protected setConnectionState(connected: true): boolean;
+  protected setConnectionState(
+    connected: false,
+    reason?: Error | null,
+  ): boolean;
+  protected setConnectionState(
+    connected: boolean,
+    reason?: Error | null,
+  ): boolean;
   protected setConnectionState(connected: boolean) {
     const ret = super.setConnectionState(connected);
     if (ret === true) {
-      this.emit('connect');
+      this.dispatchEvent(new RpcApiWebEvent.ConnectEvent(this));
     } else if (ret === false) {
-      this.emit('disconnect');
+      this.dispatchEvent(new RpcApiWebEvent.DisconnectEvent(this, null));
     }
     return ret;
   }
 
   protected handleRpcData(res: ResolveMain<Version>) {
-    this.emit('rpcPartialReceived', res);
+    this.dispatchEvent(new RpcApiWebEvent.RpcPartialReceived(this, res));
     const maybeReses = super.handleRpcData(res);
     if (maybeReses != null) {
-      this.emit('rpcReceived', maybeReses);
+      this.dispatchEvent(new RpcApiWebEvent.RpcReceivedEvent(this, maybeReses));
       if (res.commandId === 0) {
-        this.emit('rpcMessage', maybeReses);
+        this.dispatchEvent(
+          new RpcApiWebEvent.RpcMessageEvent(this, maybeReses),
+        );
+        if (res.content === 'guiScreenFrame') {
+          this.dispatchEvent(
+            new RpcApiWebEvent.ScreenFrameEvent(
+              ScreenFrame.fromMessages(maybeReses),
+            ),
+          );
+        }
       } else {
-        this.emit('rpcCommandResponse', maybeReses);
+        this.dispatchEvent(
+          new RpcApiWebEvent.RpcCommandResponseEvent(this, maybeReses),
+        );
       }
     }
     return maybeReses;
@@ -295,7 +222,7 @@ export class RpcApiNode<
       [FIRST_VERSION, '...', LATEST_VERSION],
       null | undefined
     >
-  ): Promise<RpcApiNode<[FIRST_VERSION, '...', LATEST_VERSION]>>;
+  ): Promise<RpcApiWeb<[FIRST_VERSION, '...', LATEST_VERSION]>>;
   static async create<const Version extends PROTOBUF_VERSION>(
     port: RpcWebSerialPort,
     ...[options, defaultMainProperties]: CreateArgs<
@@ -303,7 +230,7 @@ export class RpcApiNode<
       | { version: Version; force?: boolean }
       | { version: Version; requireExactMatch?: boolean }
     >
-  ): Promise<RpcApiNode<Version>>;
+  ): Promise<RpcApiWeb<Version>>;
   static async create<const MinV extends PROTOBUF_VERSION>(
     port: RpcWebSerialPort,
     ...[options, defaultMainProperties]: CreateArgs<
@@ -314,7 +241,7 @@ export class RpcApiNode<
           fallbackVersion?: AllVersionsInRange<[MinV, '...', LATEST_VERSION]>;
         }
     >
-  ): Promise<RpcApiNode<[MinV, '...', LATEST_VERSION]>>;
+  ): Promise<RpcApiWeb<[MinV, '...', LATEST_VERSION]>>;
   static async create<const MaxV extends PROTOBUF_VERSION>(
     port: RpcWebSerialPort,
     ...[options, defaultMainProperties]: CreateArgs<
@@ -325,7 +252,7 @@ export class RpcApiNode<
           fallbackVersion?: AllVersionsInRange<[FIRST_VERSION, '...', MaxV]>;
         }
     >
-  ): Promise<RpcApiNode<[FIRST_VERSION, '...', MaxV]>>;
+  ): Promise<RpcApiWeb<[FIRST_VERSION, '...', MaxV]>>;
   static async create<
     const MinV extends PROTOBUF_VERSION,
     const MaxV extends PROTOBUF_VERSION,
@@ -339,7 +266,7 @@ export class RpcApiNode<
           fallbackVersion?: AllVersionsInRange<[MinV, '...', MaxV]>;
         }
     >
-  ): Promise<RpcApiNode<[MinV, '...', MaxV]>>;
+  ): Promise<RpcApiWeb<[MinV, '...', MaxV]>>;
   static async create(
     port: RpcWebSerialPort,
     ...[options, ...defaultMainProperties]: CreateArgs<
@@ -351,7 +278,7 @@ export class RpcApiNode<
       | null
       | undefined
     >
-  ): Promise<RpcApiNode<[FIRST_VERSION, '...', LATEST_VERSION]>>;
+  ): Promise<RpcApiWeb<[FIRST_VERSION, '...', LATEST_VERSION]>>;
   static async create(
     port: RpcWebSerialPort,
     ...[options, ...defaultMainProperties]: CreateArgs<
@@ -367,17 +294,19 @@ export class RpcApiNode<
       | null
       | undefined
     >
-  ): Promise<RpcApiNode<[FIRST_VERSION, '...', LATEST_VERSION]>> {
+  ): Promise<RpcApiWeb<[FIRST_VERSION, '...', LATEST_VERSION]>> {
     const { version, protobuf, matchMode } = await matchProtobufVersion(
       port,
       options,
     );
-    return new RpcApiNode<[FIRST_VERSION, '...', LATEST_VERSION]>(
+    return new RpcApiWeb<[FIRST_VERSION, '...', LATEST_VERSION]>(
       port,
       version,
-      protobuf.PB.Main,
+      protobuf,
       matchMode,
       ...defaultMainProperties,
     );
   }
 }
+
+export default RpcApiWeb;
