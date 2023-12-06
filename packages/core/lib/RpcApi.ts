@@ -1,10 +1,10 @@
 import type * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
 import {
-  PROTOBUF_VERSION,
+  PROTOBUF_VERSION_MAP,
   loadVersion,
 } from '@flipper-rpc-client/versioned-protobuf';
-import { PatchedMainCtor, Resolve, ResolveOrBootstrap } from './Types.js';
-import { ApiInterfaceByVersionMap, apiDefs } from './Commands.js';
+import { Resolve } from './Types.js';
+import { CommandsByVersion, makeFromVersion } from './Commands.js';
 import RpcSerialPort from './RpcSerialPort.js';
 import matchProtobufVersion, {
   makeCreateFunction,
@@ -12,6 +12,7 @@ import matchProtobufVersion, {
 import { ensureError } from './Utils.js';
 import { CommandError } from './Errors/CommandError.js';
 import { StreamProtobufReader } from './StreamProtobufReader.js';
+import { VersionedProtobuf } from './VersionedProtobuf.js';
 
 const MAX_ID = 2 ** 32 - 1;
 
@@ -52,18 +53,22 @@ function tryAllVoid<const Fns extends readonly ((...args: any[]) => any)[]>(
   }
 }
 
-export interface BaseInFlightRpcCommand<Version extends PROTOBUF_VERSION> {
+export interface BaseInFlightRpcCommand<
+  Version extends keyof PROTOBUF_VERSION_MAP,
+> {
   isExpected: boolean;
   reses: Resolve.Main<Version>[];
 }
 
-export interface UnexpectedInFlightRpcCommand<Version extends PROTOBUF_VERSION>
-  extends BaseInFlightRpcCommand<Version> {
+export interface UnexpectedInFlightRpcCommand<
+  Version extends keyof PROTOBUF_VERSION_MAP,
+> extends BaseInFlightRpcCommand<Version> {
   isExpected: false;
 }
 
-export interface ExpectedInFlightRpcCommand<Version extends PROTOBUF_VERSION>
-  extends BaseInFlightRpcCommand<Version> {
+export interface ExpectedInFlightRpcCommand<
+  Version extends keyof PROTOBUF_VERSION_MAP,
+> extends BaseInFlightRpcCommand<Version> {
   isExpected: true;
   request: [Resolve.Main<Version>, ...Resolve.Main<Version>[]];
   resolve(
@@ -87,15 +92,22 @@ export interface ExpectedInFlightRpcCommand<Version extends PROTOBUF_VERSION>
   reject(err: any): void;
 }
 
-export type InFlightRpcCommand<Version extends PROTOBUF_VERSION> =
+export type InFlightRpcCommand<Version extends keyof PROTOBUF_VERSION_MAP> =
   | UnexpectedInFlightRpcCommand<Version>
   | ExpectedInFlightRpcCommand<Version>;
 
-export class RpcApi<Version extends PROTOBUF_VERSION> {
-  #pbModule: Resolve.Version<Version>;
-  #Main: PatchedMainCtor<Version>;
+type MaybePromise<T> = Promise<T> | T;
+
+export class RpcApi<Version extends keyof PROTOBUF_VERSION_MAP> {
+  #protobuf: MaybePromise<VersionedProtobuf<Version>> | undefined;
+  #protobufState:
+    | {
+        reader: StreamProtobufReader<Resolve.Main<Version>>;
+        CommandStatus: Resolve.CommandStatus<Version>;
+      }
+    | undefined;
+  #backlog: Uint8Array[] = [];
   readonly port: RpcSerialPort;
-  #reader: StreamProtobufReader<Resolve.Main<Version>>;
   #id = 1;
   #connected = false;
   #defaultMainProperties: Omit<
@@ -116,14 +128,29 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
     return this.port.isConnected;
   }
 
-  get protocolModule() {
-    return this.#pbModule;
+  getProtobuf(): MaybePromise<VersionedProtobuf<Version>> {
+    if (this.#protobuf == null) {
+      this.#protobuf = loadVersion(this.version).then(
+        (pbModule) => {
+          const pbuf = new VersionedProtobuf(pbModule);
+          this.#protobufState = {
+            reader: pbuf.Reader,
+            CommandStatus: pbuf.CommandStatus,
+          };
+          return pbuf;
+        },
+        (err) => {
+          this.#protobuf = undefined;
+          throw err;
+        },
+      );
+    }
+    return this.#protobuf;
   }
 
-  protected constructor(
+  public constructor(
     port: RpcSerialPort,
     readonly version: Version,
-    pbModule: Resolve.Version<Version>,
     readonly matchMode: matchProtobufVersion.Mode,
     ...[defaultMainProperties]: Resolve.DefaultMainParams<Version>
   ) {
@@ -131,9 +158,7 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
       NonNullable<ConstructorParameters<Resolve.MainCtor<Version>>[0]>,
       'commandId' | 'hasNext'
     >;
-    this.#pbModule = pbModule;
-    this.#Main = pbModule.PB.Main as PatchedMainCtor<Version>;
-    this.#reader = new StreamProtobufReader(this.#Main);
+    this.cmds = makeFromVersion(this);
     this.port = port;
     this.onData = this.onData.bind(this);
     if (port.isConnected) {
@@ -193,7 +218,7 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
         } finally {
           tryAllVoid(
             [this.port, this.port.detachConsumer, this.onData],
-            [this, () => this.#reader.clear()],
+            [this, () => this.#protobufState?.reader.clear()],
             [this, this.setConnectionState, false],
           );
         }
@@ -206,6 +231,7 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
 
   protected handleRpcData(
     res: Resolve.Main<Version>,
+    CommandStatus: Resolve.CommandStatus<Version>,
   ): Resolve.Main<Version>[] | undefined {
     const commandEntry = this.#commands.get(res.commandId) ?? {
       isExpected: false,
@@ -222,14 +248,12 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
       if (commandEntry.isExpected) {
         if (
           commandEntry.reses.some(
-            ({ commandStatus }) =>
-              commandStatus !== this.#pbModule.PB.CommandStatus.OK,
+            ({ commandStatus }) => commandStatus !== CommandStatus.OK,
           )
         ) {
           commandEntry.reject(
             new CommandError(
-              this.#pbModule.PB
-                .CommandStatus as ResolveOrBootstrap.Version<Version>['PB']['CommandStatus'],
+              CommandStatus,
               commandEntry.request,
               commandEntry.reses,
             ),
@@ -256,14 +280,19 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
   }
 
   private onData(chunk: Uint8Array) {
-    this.#reader.append(chunk);
+    if (!this.#protobufState) {
+      this.#backlog.push(chunk);
+      return;
+    }
+    const { reader, CommandStatus } = this.#protobufState;
+    reader.append(chunk);
     let res: Resolve.Main<Version> | null;
-    while ((res = this.#reader.next()) != null) {
-      this.handleRpcData(res);
+    while ((res = reader.next()) != null) {
+      this.handleRpcData(res, CommandStatus);
     }
   }
 
-  private enqueue<
+  private async enqueue<
     const CMD extends NonNullable<
       InstanceType<Resolve.MainCtor<Version>>['content']
     > &
@@ -278,6 +307,7 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
       'commandId' | 'hasNext'
     >,
   ) {
+    const { Main } = await this.getProtobuf();
     return new Promise<
       [
         InstanceType<Resolve.MainCtor<Version>>,
@@ -299,14 +329,14 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
       const request = properties.map((props) =>
-        this.#Main.create({
+        Main.create({
           ...rootProps,
           hasNext: true,
           [commandName]: props,
         }),
       );
       request.push(
-        this.#Main.create({
+        Main.create({
           ...rootProps,
           hasNext: false,
           [commandName]: lastProps,
@@ -321,7 +351,7 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
       });
       try {
         request.forEach((cmd) => {
-          this.port.write(this.#Main.encodeDelimited(cmd).finish());
+          this.port.write(Main.encodeDelimited(cmd).finish());
         });
       } catch (err) {
         this.#commands.delete(commandId);
@@ -477,88 +507,9 @@ export class RpcApi<Version extends PROTOBUF_VERSION> {
     return this.#closeAndReset();
   }
 
-  get cmds(): {
-    [key in keyof ApiInterfaceByVersionMap[Version]]: ApiInterfaceByVersionMap[Version][key];
-  } {
-    if (this === RpcApi.prototype || !(this instanceof RpcApi)) {
-      throw new TypeError(
-        `Method get FlipperRPCApi.prototype.cmds called on incompatible receiver ${String(
-          this,
-        )}`,
-      );
-    }
-    const { version } = this;
-    const cmds: ApiInterfaceByVersionMap[Version] = Object.fromEntries(
-      apiDefs
-        .map(([key, fns]) => {
-          const suppertedImpl = (
-            fns as readonly (readonly [
-              // eslint-disable-next-line @typescript-eslint/ban-types
-              Function,
-              readonly PROTOBUF_VERSION[],
-            ])[]
-          ).find(([, supportedVersions]) =>
-            supportedVersions.includes(version),
-          )?.[0] as (typeof fns)[number][0] | undefined;
-          if (suppertedImpl == null) {
-            return null;
-          }
-          return [key, suppertedImpl.bind(this)] as const;
-        })
-        .filter((f): f is NonNullable<typeof f> => f != null),
-    ) as ApiInterfaceByVersionMap[Version];
-    Object.defineProperty(this, 'cmds', {
-      value: cmds,
-      writable: true,
-      enumerable: false,
-      configurable: true,
-    });
-    return cmds;
-  }
+  readonly cmds: CommandsByVersion<Version>;
 
   static create = makeCreateFunction<RpcSerialPort, typeof RpcApi>(RpcApi);
-
-  static async instantiate<Version extends PROTOBUF_VERSION>(
-    port: RpcSerialPort,
-    version: Version,
-    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
-  ): Promise<RpcApi<Version>>;
-  static async instantiate<Version extends PROTOBUF_VERSION>(
-    port: RpcSerialPort,
-    version: Version,
-    matchMode: matchProtobufVersion.Mode,
-    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
-  ): Promise<RpcApi<Version>>;
-  static async instantiate<Version extends PROTOBUF_VERSION>(
-    port: RpcSerialPort,
-    version: Version,
-    ...[matchMode, ...defaultMainProperties]:
-      | Resolve.DefaultMainParams<Version>
-      | [
-          matchMode: matchProtobufVersion.Mode,
-          ...defaultMainProperties: Resolve.DefaultMainParams<Version>,
-        ]
-  ): Promise<RpcApi<Version>> {
-    const pbModule = (await loadVersion(version)) as Resolve.Version<Version>;
-    if (typeof matchMode === 'object' || matchMode == null) {
-      return new RpcApi(
-        port,
-        version,
-        pbModule,
-        matchProtobufVersion.Mode.FORCED,
-        ...((matchMode != null
-          ? [matchMode]
-          : []) as Resolve.DefaultMainParams<Version>),
-      );
-    }
-    return new RpcApi(
-      port,
-      version,
-      pbModule,
-      matchMode,
-      ...(defaultMainProperties as Resolve.DefaultMainParams<Version>),
-    );
-  }
 }
 const cmdGetter = Object.getOwnPropertyDescriptor(RpcApi.prototype, 'cmds')!
   .get!;

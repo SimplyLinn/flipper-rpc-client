@@ -1,15 +1,15 @@
-import { PROTOBUF_VERSION } from '@flipper-rpc-client/versioned-protobuf';
-import { ResolveOrBootstrap as Resolve } from '../Types.js';
+import { PROTOBUF_VERSION_MAP } from '@flipper-rpc-client/versioned-protobuf';
+import { Resolve } from '../Types.js';
 
 export class CommandError<
-  Version extends PROTOBUF_VERSION | 'bootstrap',
+  Version extends keyof PROTOBUF_VERSION_MAP,
 > extends Error {
   readonly commandStatus: Resolve.Main<Version>['commandStatus'] | -1;
   readonly requests: readonly Resolve.Main<Version>[];
   readonly responses: readonly Resolve.Main<Version>[];
 
   constructor(
-    CommandStatuses: Resolve.Version<Version>['PB']['CommandStatus'],
+    CommandStatuses: Resolve.CommandStatus<Version>,
     requests: readonly Resolve.Main<Version>[],
     responses: readonly Resolve.Main<Version>[],
     message?: string,

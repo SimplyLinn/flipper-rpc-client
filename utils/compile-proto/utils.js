@@ -1,12 +1,12 @@
 import url from 'node:url';
 import path from 'node:path';
-import util from 'node:util';
 import child_process from 'node:child_process';
 import pbjs from 'protobufjs-cli/pbjs.js';
 import fs from 'node:fs/promises';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import prettier from 'prettier';
+import typeName from './typeName.js';
 
 export async function doPrettier(data, filePath) {
   const config = await prettier.resolveConfig(filePath);
@@ -23,14 +23,6 @@ const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 export const argv = await yargs(hideBin(process.argv)).argv;
 
-function typeName(o) {
-  if (o === null) return 'null';
-  if (typeof o === 'object') {
-    return Object.prototype.toString.call(o);
-  }
-  return typeof o;
-}
-
 if ('root' in argv && typeof argv.root !== 'string') {
   console.error(
     'Invalid root argument, expected string got %s',
@@ -45,6 +37,69 @@ export const OUTPUT_ROOT =
     : path.resolve(process.cwd(), argv.root);
 
 export const VERSIONS_DIR = path.join(OUTPUT_ROOT, 'v');
+
+class CmdError extends Error {
+  /**
+   * @readonly
+   * @type {readonly (readonly [buffer: 'stderr' | 'stdout', data: Buffer])[]}
+   */
+  output;
+  /**
+   * @readonly
+   * @type {number | null}
+   */
+  code;
+  /**
+   * @readonly
+   * @type {NodeJS.Signals | null}
+   */
+  signal;
+  /**
+   * @readonly
+   * @type {string}
+   */
+  cmd;
+  /**
+   * @readonly
+   * @type {string}
+   */
+  cwd;
+  /**
+   * @readonly
+   * @type {readonly string[]}
+   */
+  args;
+
+  /**
+   * @overload
+   * @param {string} msg
+   * @param {{ cwd: string; cmd: string; args: readonly string[]; code?: number | null; signal?: NodeJS.Signals | null; output: readonly (readonly [buffer: 'stderr' | 'stdout', data: Buffer])[] }} opts
+   */
+  /**
+   * @overload
+   * @param {Error} err
+   * @param {{ cwd: string; cmd: string; args: readonly string[]; code?: number | null; signal?: NodeJS.Signals | null; output: readonly (readonly [buffer: 'stderr' | 'stdout', data: Buffer])[] }} opts
+   */
+  /**
+   * @param {string | Error} msgOrError
+   * @param {{ cwd: string; cmd: string; args: readonly string[]; code?: number | null; signal?: NodeJS.Signals | null; output: readonly (readonly [buffer: 'stderr' | 'stdout', data: Buffer])[] }} opts
+   */
+  constructor(msgOrError, opts) {
+    if (msgOrError instanceof Error) {
+      super(msgOrError.message, { cause: msgOrError });
+    } else {
+      super(msgOrError);
+    }
+    ({
+      output: this.output,
+      code: this.code = null,
+      signal: this.signal = null,
+      cmd: this.cmd,
+      cwd: this.cwd,
+      args: this.args,
+    } = opts);
+  }
+}
 
 /**
  * @param {string[]} [extraTags]
@@ -68,7 +123,7 @@ export async function* loadTags(extraTags) {
       if (typeof fetchError === 'undefined') return;
       // Not a fatal error, report it and continue
       console.error('Failed to fetch tags from upstream flipperzero-protobuf');
-      if (fetchError instanceof Error && Array.isArray(fetchError.output)) {
+      if (fetchError instanceof CmdError) {
         const stderr = [];
         for (const [buffer, data] of fetchError.output) {
           if (buffer === 'stderr') {
@@ -82,9 +137,10 @@ export async function* loadTags(extraTags) {
         console.error(fetchError);
       }
     },
+    /** @param {unknown} err */
     (err) => {
       console.error('Failed to init git submodule');
-      if (err instanceof Error && Array.isArray(err.output)) {
+      if (err instanceof CmdError) {
         const stderr = [];
         for (const [buffer, data] of err.output) {
           if (buffer === 'stderr') {
@@ -152,224 +208,6 @@ export async function* loadTags(extraTags) {
       srcFiles,
     };
     console.info('Compiling protobuf version %s: DONE', version);
-  }
-}
-
-/**
- * @type {{
- *   lintText(source: string, path: string): Promise<import('eslint').ESLint.LintResult>;
- *   awaitingResponse: [id: number, resolve: (result: import('eslint').ESLint.LintResult | PromiseLike<import('eslint').ESLint.LintResult>) => void, reject: (err: unknown) => void][];
- *   cp: child_process.ChildProcessByStdio<null, null, null>;
- *   abort(err: unknown): void;
- *   spawned: [id: number, source: string, path: string][] | null;
- * } | null}
- */
-let linter = null;
-
-export function eslintText(source, filepath) {
-  if (!linter) {
-    /** @type {child_process.ChildProcessByStdio<null, null, null>} */
-    const cp = child_process.fork(
-      path.join(__dirname, 'eslint.js'),
-      [filepath],
-      {
-        stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-        cwd: process.cwd(),
-      },
-    );
-    let idCounter = 0;
-    /** @type {typeof linter} */
-    const _linter = (linter = {
-      lintText(source, filePath) {
-        const id = idCounter++;
-        return new Promise((_resolve, _reject) => {
-          let fulfilled = false;
-          /** @type {typeof _resolve} */
-          const resolve = (val) => {
-            try {
-              if (!fulfilled) _resolve(val);
-            } finally {
-              fulfilled = true;
-              const index = this.awaitingResponse.findIndex(
-                ([, r]) => r === resolve,
-              );
-              if (index >= 0) this.awaitingResponse.splice(index, 1);
-            }
-          };
-          /** @type {typeof _reject} */
-          const reject = (err) => {
-            try {
-              if (!fulfilled) _reject(err);
-            } finally {
-              fulfilled = true;
-              const index = this.awaitingResponse.findIndex(
-                ([, , r]) => r === reject,
-              );
-              if (index >= 0) this.awaitingResponse.splice(index, 1);
-            }
-          };
-          this.awaitingResponse.push([id, resolve, reject]);
-          if (this.spawned) {
-            this.spawned.push([id, source, filePath]);
-          } else if (this.cp) {
-            this.cp.send(
-              {
-                type: 'lint',
-                id,
-                source,
-                filePath,
-              },
-              (err) => {
-                if (err) reject(err);
-              },
-            );
-          } else {
-            reject(new Error('Linter is not initialized'));
-          }
-        });
-      },
-      awaitingResponse: [],
-      cp,
-      spawned: [],
-      abort(err) {
-        this.awaitingResponse.forEach(([, , reject]) => {
-          try {
-            reject(err);
-          } catch (err) {
-            console.error(err);
-          }
-        });
-        this.awaitingResponse.length = 0;
-        this.spawned = null;
-        this.cp = null;
-        linter = null;
-        try {
-          cp.kill('SIGKILL');
-        } catch {
-          // pass
-        }
-      },
-    });
-    cp.on('message', (message) => {
-      if (typeof message !== 'object' || message === null) {
-        console.error('Invalid message from eslint child process:', message);
-        _linter.abort(new Error(util.format('Invalid message: %O', message)));
-        return;
-      }
-      if (message.type === 'lint-response') {
-        const { id, status, data } = message;
-        const req = _linter.awaitingResponse.find(([resId]) => resId === id);
-        if (!req) {
-          console.warn(
-            `Received response for unknown request id ${id} from eslint child process`,
-          );
-          return;
-        }
-        const [, resolve, reject] = req;
-        if (status === 'success') {
-          resolve(data);
-        } else if (status === 'error') {
-          const error = new Error(data.message);
-          Object.assign(error, data);
-          reject(error);
-        } else {
-          reject(
-            new Error(
-              `Received unknown response status ${status} from eslint child process`,
-            ),
-          );
-        }
-      } else if (message.type === 'error') {
-        const { error: rawError } = message;
-        const error = new Error(rawError.message);
-        Object.assign(error, rawError);
-        console.error('Received error from eslint child process:', error);
-        _linter.abort(error);
-      } else {
-        console.error(
-          `Received unknown message type ${message.type} from eslint child process`,
-        );
-        _linter.abort(new Error('Received unknown message type'));
-      }
-    });
-    cp.on('spawn', () => {
-      if (_linter.spawned) {
-        const spawned = _linter.spawned;
-        _linter.spawned = null;
-        Promise.allSettled(
-          spawned.map(([id, source, filePath]) => {
-            return new Promise((resolve, reject) => {
-              cp.send(
-                {
-                  type: 'lint',
-                  id,
-                  source,
-                  filePath,
-                },
-                (err) => {
-                  if (err) {
-                    const req = _linter.awaitingResponse.find(
-                      ([resId]) => resId === id,
-                    );
-                    if (req) req[2](err);
-                    reject(err);
-                  } else {
-                    resolve();
-                  }
-                },
-              );
-            });
-          }),
-        ).then((results) => {
-          const rejection = results.find(({ status }) => status === 'rejected');
-          if (rejection) {
-            _linter.abort(rejection);
-          }
-        });
-      }
-    });
-    cp.on('error', (err) => {
-      _linter.abort(err);
-    });
-    cp.on('close', (code, signal) => {
-      _linter.abort(
-        new Error(
-          `Closed unexpectedly${
-            code ? ` with code ${code}` : signal ? ` with signal ${signal}` : ''
-          }`,
-        ),
-      );
-    });
-    cp.on('disconnect', () => {
-      if (linter === _linter) {
-        _linter.abort(new Error('Disconnected unexpectedly'));
-      }
-    });
-    cp.on('exit', (code, signal) => {
-      if (linter === _linter) {
-        _linter.abort(
-          new Error(
-            `Closed unexpectedly${
-              code
-                ? ` with code ${code}`
-                : signal
-                  ? ` with signal ${signal}`
-                  : ''
-            }`,
-          ),
-        );
-      }
-    });
-  }
-  if (linter) {
-    return linter.lintText(source, filepath);
-  }
-  return Promise.reject(new Error('Linter is not initialized'));
-}
-
-export function stopEslint() {
-  if (linter) {
-    linter.abort(new Error('Linter was stopped'));
   }
 }
 
@@ -490,88 +328,6 @@ export async function needsCompile(tagCommit, outDir) {
 }
 
 /**
- * @param {string[]} versions
- */
-export function makeProtobufIndex(versions) {
-  const escapedVersions = versions.map((v) =>
-    JSON.stringify(v).trim().replace(/^"|"$/g, ''),
-  );
-  const tsDef = `export type PROTOBUF_VERSION_MAP = {${escapedVersions
-    .map(
-      (v) =>
-        `"${v}":{ [key in keyof (typeof import("./v/${v}/index.js")) ]: (typeof import("./v/${v}/index.js"))[key] }`,
-    )
-    .join(',')}};
-export type PROTOBUF_VERSIONS = readonly ["${escapedVersions.join('","')}"];
-export declare const PROTOBUF_VERSIONS: PROTOBUF_VERSIONS;
-export type PROTOBUF_VERSION = PROTOBUF_VERSIONS[number];
-${escapedVersions
-  .map(
-    (v) =>
-      `export declare function loadVersion(version: "${v}"): Promise<PROTOBUF_VERSION_MAP["${v}"]>;`,
-  )
-  .join('\n')}
-export declare function loadVersion<T extends PROTOBUF_VERSION>(version: T): Promise<PROTOBUF_VERSION_MAP[T]>;
-export declare const FIRST_VERSION: "${escapedVersions[0]}";
-export type FIRST_VERSION = typeof FIRST_VERSION;
-export declare const LATEST_VERSION: "${
-    escapedVersions[escapedVersions.length - 1]
-  }";
-export type LATEST_VERSION = typeof LATEST_VERSION;
-export declare function isValidVersion(version: string): version is PROTOBUF_VERSION;
-`;
-  const esm = `export const PROTOBUF_VERSIONS = ["${escapedVersions.join(
-    '","',
-  )}"];
-export function loadVersion(version) {
-  return import(
-    /* webpackChunkName: "protobuf-version" */
-    /* webpackMode: "lazy-once" */
-    \`./v/\${version}/index.js\`
-  );
-}
-export const FIRST_VERSION = "${escapedVersions[0]}";
-export const LATEST_VERSION = "${escapedVersions[escapedVersions.length - 1]}";
-export function isValidVersion(version) {
-  return PROTOBUF_VERSIONS.includes(version);
-}
-`;
-  const cjs = `const PROTOBUF_VERSIONS = ["${escapedVersions.join('","')}"];
-function loadVersion(version) {
-  return Promise.resolve(
-    require(
-      /* webpackChunkName: "protobuf-version" */
-      /* webpackMode: "lazy-once" */
-      \`./v/\${version}/index.cjs\`,
-    ),
-  );
-}
-const FIRST_VERSION = "${escapedVersions[0]}";
-const LATEST_VERSION = "${escapedVersions[escapedVersions.length - 1]}";
-function isValidVersion(version) {
-  return PROTOBUF_VERSIONS.includes(version);
-}
-module.exports = {
-  PROTOBUF_VERSIONS,
-  loadVersion,
-  FIRST_VERSION,
-  LATEST_VERSION,
-  isValidVersion,
-};
-`;
-  const namespaceDef = escapedVersions
-    .map(
-      (v) =>
-        `export type * as v${v.replace(
-          /[^a-zA-Z0-9_$]/g,
-          '_',
-        )} from './v/${v}/index.d.ts';`,
-    )
-    .join('\n');
-  return { tsDef, esm, cjs, namespaceDef };
-}
-
-/**
  * @template {unknown} T
  * @param {string} text
  * @param {(() => Promise<T>) | Promise<T>} toAwait
@@ -595,9 +351,9 @@ export async function Loader(text, toAwait) {
  *
  * @param {string} cmd
  * @param {string[]} args
- * @param {string | Buffer | ReadableStream | null} [stdin]
+ * @param {string | Buffer | NodeJS.ReadableStream | null} [stdin]
  * @param {string} [cwd]
- * @returns {Promise<[buffer: 'stdout' | 'stderr', data: Buffer][]>}
+ * @returns {Promise<(readonly [buffer: 'stdout' | 'stderr', data: Buffer])[]>}
  */
 export function runCmd(cmd, args, stdin, cwd = process.cwd()) {
   return new Promise((resolve, reject) => {
@@ -606,7 +362,7 @@ export function runCmd(cmd, args, stdin, cwd = process.cwd()) {
         stdio: ['pipe', 'pipe', 'pipe'],
         cwd,
       });
-      /** @type {[buffer: 'stdout' | 'stderr', data: Buffer][]} */
+      /** @type {(readonly [buffer: 'stdout' | 'stderr', data: Buffer])[]} */
       const output = [];
       cp.stdout.on(
         'data',
@@ -620,31 +376,49 @@ export function runCmd(cmd, args, stdin, cwd = process.cwd()) {
           output.push(['stderr', data]);
         },
       );
-      cp.on('exit', (code) => {
+      cp.on('exit', (code, signal) => {
         if (code !== 0) {
           reject(
-            Object.assign(new Error(`${cmd} exited with code ${code}`), {
-              cwd,
+            new CmdError(`${cmd} exited with code ${code}`, {
+              cmd,
               args,
+              cwd,
               code,
-              output: output.map(([buffer, data]) => [
-                buffer,
-                data.toString('utf8'),
-              ]),
+              signal,
+              output,
             }),
           );
+        } else {
+          resolve(output);
         }
-        resolve(output);
       });
-      cp.on('error', (err) => reject(err));
+      cp.on('error', (err) =>
+        reject(
+          new CmdError(err, {
+            cmd,
+            args,
+            cwd,
+            output,
+          }),
+        ),
+      );
       if (!cp.stdin.closed) {
-        if (stdin instanceof Buffer || typeof stdin === 'string')
+        if (stdin instanceof Buffer || typeof stdin === 'string') {
           cp.stdin.write(stdin, (err) =>
-            err ? reject(err) : cp.stdin.end((err) => err && reject(err)),
+            err
+              ? reject(
+                  new CmdError(err, {
+                    cmd,
+                    args,
+                    cwd,
+                    output,
+                  }),
+                )
+              : cp.stdin.end(),
           );
-        if (stdin != null && 'pipe' in stdin) {
+        } else if (stdin != null && 'pipe' in stdin) {
           stdin.pipe(cp.stdin);
-        } else cp.stdin.end((err) => err && reject(err));
+        } else cp.stdin.end();
       }
     } catch (err) {
       reject(err);

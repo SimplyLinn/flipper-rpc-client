@@ -6,14 +6,13 @@ import {
   formatEslintMessage,
   pbjsMain,
   pbtsMain,
-  eslintText,
-  stopEslint,
   doPrettier,
   argv,
 } from './utils.js';
+import { eslintText, stopEslint } from './eslintHelper.js';
 
 try {
-  for await (const tag of loadTags(argv._)) {
+  for await (const tag of loadTags(argv._.map((s) => String(s)))) {
     const [strippedEsmOutput, strippedCjsOutput, fullOutput] = await Loader(
       'Generating protobuf static module',
       () =>
@@ -56,7 +55,7 @@ try {
       () =>
         Promise.all([
           eslintText(strippedEsmOutput, path.join(tag.outDir, 'index.js')).then(
-            ([result]) => {
+            (result) => {
               if (result.fatalErrorCount > 0 || !result.output) {
                 const firstFatal = result.messages.find((m) => m.fatal);
                 if (firstFatal) {
@@ -79,7 +78,7 @@ try {
           eslintText(
             strippedCjsOutput,
             path.join(tag.outDir, 'index.cjs'),
-          ).then(([result]) => {
+          ).then((result) => {
             if (result.fatalErrorCount > 0 || !result.output) {
               const firstFatal = result.messages.find((m) => m.fatal);
               if (firstFatal) {
@@ -98,7 +97,7 @@ try {
             );
           }),
           eslintText(tsOutput, path.join(tag.outDir, 'index.d.ts')).then(
-            ([result]) => {
+            (result) => {
               if (result.fatalErrorCount > 0 || !result.output) {
                 const firstFatal = result.messages.find((m) => m.fatal);
                 if (firstFatal) {

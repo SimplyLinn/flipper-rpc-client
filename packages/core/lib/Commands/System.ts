@@ -125,9 +125,9 @@ export const systemProtobufVersion = cmd.v0_2.andUp(async function () {
 export const systemRebootRequest = [
   cmd.v0_5.andDown(async function (
     rebootMode?: NonNullable<
-      Parameters<
-        (typeof this)['protocolModule']['PB_System']['RebootRequest']['create']
-      >[0]
+      NonNullable<
+        ConstructorParameters<Resolve.MainCtor<(typeof this)['version']>>[0]
+      >['systemRebootRequest']
     >['mode'],
   ) {
     return this.rawCommand('systemRebootRequest', {
@@ -151,9 +151,9 @@ export const systemRebootRequest = [
   }),
   cmd.v0_6.andUp(async function (
     rebootMode?: NonNullable<
-      Parameters<
-        (typeof this)['protocolModule']['PB_System']['RebootRequest']['create']
-      >[0]
+      NonNullable<
+        ConstructorParameters<Resolve.MainCtor<(typeof this)['version']>>[0]
+      >['systemRebootRequest']
     >['mode'],
   ) {
     return this.rawCommand('systemRebootRequest', {

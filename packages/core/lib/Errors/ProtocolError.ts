@@ -1,8 +1,8 @@
-import { PROTOBUF_VERSION } from '@flipper-rpc-client/versioned-protobuf';
-import { ResolveOrBootstrap as Resolve } from '../Types.js';
+import { PROTOBUF_VERSION_MAP } from '@flipper-rpc-client/versioned-protobuf';
+import { Resolve } from '../Types.js';
 
 export class ProtocolError<
-  Version extends PROTOBUF_VERSION | 'bootstrap',
+  Version extends keyof PROTOBUF_VERSION_MAP,
 > extends Error {
   constructor(message: string);
   constructor(

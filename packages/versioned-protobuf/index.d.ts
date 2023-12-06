@@ -1,4 +1,12 @@
+export declare const FIRST_VERSION: '0.1';
+export declare const LATEST_VERSION: '0.21';
+export type LATEST_VERSION = typeof LATEST_VERSION;
+export declare const BOOTSTRAP_VERSION: unique symbol;
+export type BOOTSTRAP_VERSION = typeof BOOTSTRAP_VERSION;
 export type PROTOBUF_VERSION_MAP = {
+  [BOOTSTRAP_VERSION]: {
+    [key in keyof typeof import('./bootstrap.js')]: (typeof import('./bootstrap.js'))[key];
+  };
   '0.1': {
     [key in keyof typeof import('./v/0.1/index.js')]: (typeof import('./v/0.1/index.js'))[key];
   };
@@ -151,13 +159,18 @@ export declare function loadVersion(
 export declare function loadVersion(
   version: '0.21',
 ): Promise<PROTOBUF_VERSION_MAP['0.21']>;
-export declare function loadVersion<T extends PROTOBUF_VERSION>(
-  version: T,
-): Promise<PROTOBUF_VERSION_MAP[T]>;
-export declare const FIRST_VERSION: '0.1';
-export type FIRST_VERSION = typeof FIRST_VERSION;
-export declare const LATEST_VERSION: '0.21';
-export type LATEST_VERSION = typeof LATEST_VERSION;
+export declare function loadVersion(
+  version: BOOTSTRAP_VERSION,
+): Promise<PROTOBUF_VERSION_MAP[BOOTSTRAP_VERSION]>;
+export declare function loadVersion<
+  T extends PROTOBUF_VERSION | BOOTSTRAP_VERSION,
+>(version: T): Promise<PROTOBUF_VERSION_MAP[T]>;
 export declare function isValidVersion(
   version: string,
 ): version is PROTOBUF_VERSION;
+export declare function isValidVersion(
+  version: symbol,
+): version is BOOTSTRAP_VERSION;
+export declare function isValidVersion(
+  version: string | symbol,
+): version is PROTOBUF_VERSION | BOOTSTRAP_VERSION;

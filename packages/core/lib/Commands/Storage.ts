@@ -1,8 +1,7 @@
 import type * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
 import { singleResponse } from '../Utils.js';
 import { cmd } from '../_internal/cmdFactory.js';
-import type RpcApi from '../RpcApi.js';
-import { Resolve, Version } from '../Types.js';
+import { Resolve } from '../Types.js';
 
 export const storageInfo = cmd.v0_1.andUp(async function (path: string) {
   const res = singleResponse(
@@ -34,27 +33,27 @@ export const storageStat = cmd.v0_1.andUp(async function (path: string) {
   };
 });
 
-export const storageList = cmd.v0_1.andUp(async function <
-  V extends Version.AndUp<'0.1'>,
->(this: RpcApi<V>, path: string) {
+export const storageList = cmd.v0_1.andUp(async function (path: string) {
   const reses = (await this.rawCommand('storageListRequest', {
     path,
-  })) as InstanceType<Resolve.Version<V>['PB']['Main']>[];
+  })) as InstanceType<
+    Resolve.Version<(typeof this)['version']>['PB']['Main']
+  >[];
   type FileType = Exclude<
     InstanceType<
-      Resolve.Version<V>['PB_Storage']['ListResponse']
+      Resolve.Version<(typeof this)['version']>['PB_Storage']['ListResponse']
     >['file'][number]['type'],
     null | undefined
   >;
   type FileName = Exclude<
     InstanceType<
-      Resolve.Version<V>['PB_Storage']['ListResponse']
+      Resolve.Version<(typeof this)['version']>['PB_Storage']['ListResponse']
     >['file'][number]['name'],
     null | undefined
   >;
   type FileSize = Exclude<
     InstanceType<
-      Resolve.Version<V>['PB_Storage']['ListResponse']
+      Resolve.Version<(typeof this)['version']>['PB_Storage']['ListResponse']
     >['file'][number]['size'],
     null | undefined
   >;

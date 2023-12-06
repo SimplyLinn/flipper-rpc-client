@@ -6,10 +6,9 @@ import {
   pbjsMain,
   pbtsMain,
   VERSIONS_DIR,
-  eslintText,
-  stopEslint,
   doPrettier,
 } from './utils.js';
+import { eslintText, stopEslint } from './eslintHelper.js';
 
 console.info('\n~~ Compiling protobuf bootstrap');
 try {
@@ -69,7 +68,7 @@ try {
     () =>
       Promise.all([
         eslintText(strippedEsmOutput, path.join(outDir, 'bootstrap.js')).then(
-          ([result]) => {
+          (result) => {
             if (result.fatalErrorCount > 0 || !result.output) {
               const firstFatal = result.messages.find((m) => m.fatal);
               if (firstFatal) {
@@ -86,7 +85,7 @@ try {
           },
         ),
         eslintText(strippedCjsOutput, path.join(outDir, 'bootstrap.cjs')).then(
-          ([result]) => {
+          (result) => {
             if (result.fatalErrorCount > 0 || !result.output) {
               const firstFatal = result.messages.find((m) => m.fatal);
               if (firstFatal) {
@@ -106,7 +105,7 @@ try {
           },
         ),
         eslintText(tsOutput, path.join(outDir, 'bootstrap.d.ts')).then(
-          ([result]) => {
+          (result) => {
             if (result.fatalErrorCount > 0 || !result.output) {
               const firstFatal = result.messages.find((m) => m.fatal);
               if (firstFatal) {

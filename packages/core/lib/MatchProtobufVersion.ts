@@ -1,6 +1,8 @@
+import * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
 import { ensureError } from './Utils.js';
 import protobuf from 'protobufjs';
 import {
+  BOOTSTRAP_VERSION,
   FIRST_VERSION,
   LATEST_VERSION,
   PROTOBUF_VERSION,
@@ -335,7 +337,7 @@ export function matchProtobufVersion(
             message.commandStatus
           ] as string | undefined;
           return rejectOrFallback(
-            new CommandError<'bootstrap'>(
+            new CommandError<BOOTSTRAP_VERSION>(
               BootstrapPB.CommandStatus,
               [cmd],
               messages,
@@ -636,108 +638,76 @@ export type CreateArgs<
 
 export function makeCreateFunction<
   PortType extends RpcSerialPort,
-  ApiType extends {
-    instantiate<Version extends PROTOBUF_VERSION>(
-      port: PortType,
-      version: Version,
-      matchMode: matchProtobufVersion.Mode,
-      ...defaultMainProperties: Resolve.DefaultMainParams<Version>
-    ): Promise<RpcApi<Version>>;
-  },
+  ApiType extends new <Version extends PROTOBUF_VERSION>(
+    port: PortType,
+    version: Version,
+    matchMode: matchProtobufVersion.Mode,
+    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
+  ) => RpcApi<Version>,
 >(Ctor: ApiType) {
   type PB_Main<Version extends PROTOBUF_VERSION> = Awaited<
-    ReturnType<typeof Ctor.instantiate<Version>>
+    InstanceType<typeof Ctor<Version>>
   >;
-  async function create(
-    port: PortType,
-    ...[options, defaultMainProperties]: CreateArgs<
-      PROTOBUF_VERSION,
-      null | undefined
-    >
-  ): Promise<PB_Main<PROTOBUF_VERSION>>;
   async function create<const Version extends PROTOBUF_VERSION>(
     port: PortType,
-    ...[options, defaultMainProperties]: CreateArgs<
-      Version,
+    options:
       | { version: Version; force?: boolean }
-      | { version: Version; requireExactMatch?: boolean }
-    >
+      | { version: Version; requireExactMatch?: boolean },
+    defaultMainProperties?: Resolve.Options<Version>,
   ): Promise<PB_Main<Version>>;
   async function create<const MinV extends PROTOBUF_VERSION>(
     port: PortType,
-    ...[options, defaultMainProperties]: CreateArgs<
-      Version.AndUp<MinV>,
+    options:
       | { minVersion: MinV; requireExactMatch?: boolean }
       | {
           minVersion: MinV;
           fallbackVersion?: Version.AndUp<MinV>;
-        }
-    >
+        },
+    defaultMainProperties?: Resolve.Options<Version.AndUp<MinV>>,
   ): Promise<PB_Main<Version.AndUp<MinV>>>;
   async function create<const MaxV extends PROTOBUF_VERSION>(
     port: PortType,
-    ...[options, defaultMainProperties]: CreateArgs<
-      Version.AndDown<MaxV>,
+    options:
       | { maxVersion: MaxV; requireExactMatch?: boolean }
       | {
           maxVersion: MaxV;
           fallbackVersion?: Version.AndDown<MaxV>;
-        }
-    >
+        },
+    defaultMainProperties?: Resolve.Options<Version.AndDown<MaxV>>,
   ): Promise<PB_Main<Version.AndDown<MaxV>>>;
   async function create<
     const MinV extends PROTOBUF_VERSION,
     const MaxV extends PROTOBUF_VERSION,
   >(
     port: PortType,
-    ...[options, defaultMainProperties]: CreateArgs<
-      Version.Between<MinV, MaxV>,
+    options:
       | { minVersion: MinV; maxVersion: MaxV; requireExactMatch?: boolean }
       | {
           maxVersion: MaxV;
           fallbackVersion?: Version.Between<MinV, MaxV>;
-        }
-    >
+        },
+    defaultMainProperties?: Resolve.Options<Version.Between<MinV, MaxV>>,
   ): Promise<PB_Main<Version.Between<MinV, MaxV>>>;
   async function create(
     port: PortType,
-    ...[options, ...defaultMainProperties]: CreateArgs<
-      PROTOBUF_VERSION,
-      | {
-          requireExactMatch?: boolean;
-          fallbackVersion?: PROTOBUF_VERSION;
-        }
-      | null
-      | undefined
-    >
-  ): Promise<PB_Main<PROTOBUF_VERSION>>;
-  async function create(
-    port: PortType,
-    ...[options, ...defaultMainProperties]: CreateArgs<
-      PROTOBUF_VERSION,
-      | { version: PROTOBUF_VERSION; force?: boolean }
-      | { version: PROTOBUF_VERSION; requireExactMatch?: boolean }
-      | {
-          minVersion?: PROTOBUF_VERSION;
-          maxVersion?: PROTOBUF_VERSION;
-          requireExactMatch?: boolean;
-          fallbackVersion?: PROTOBUF_VERSION;
-        }
-      | null
-      | undefined
-    >
+    options?: {
+      requireExactMatch?: boolean;
+      fallbackVersion?: PROTOBUF_VERSION;
+    } | null,
+    defaultMainProperties?: Resolve.Options<PROTOBUF_VERSION>,
   ): Promise<PB_Main<PROTOBUF_VERSION>>;
   async function create(
     this: ApiType,
     port: PortType,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...[options, ...defaultMainProperties]: CreateArgs<LATEST_VERSION, any>
+    options?: any,
+    ...defaultMainProperties: Resolve.DefaultMainParams<PROTOBUF_VERSION>
   ): Promise<unknown> {
-    const { version, matchMode } = await matchProtobufVersion<LATEST_VERSION>(
+    const { version, matchMode } = await matchProtobufVersion<PROTOBUF_VERSION>(
       port,
       options,
     );
-    return Ctor.instantiate(port, version, matchMode, ...defaultMainProperties);
+    return new Ctor(port, version, matchMode, ...defaultMainProperties);
   }
 
   return create;

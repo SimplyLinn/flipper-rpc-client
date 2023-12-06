@@ -1,4 +1,11 @@
 import { ESLint } from 'eslint';
+import typeName from './typeName.js';
+
+if (process.send === undefined) {
+  throw new Error('This script must be run as a child process');
+}
+
+const send = process.send.bind(process);
 
 const eslint = new ESLint({
   fix: true,
@@ -32,18 +39,21 @@ function ensureError(thrown) {
     };
   }
   if (typeof thrown === 'object' && thrown !== null) {
-    if (typeof thrown.message === 'string') {
+    if ('message' in thrown && typeof thrown.message === 'string') {
       const err = {
         name: 'Error',
         message: thrown.message,
       };
-      if (typeof thrown.stack === 'string') {
+      if ('stack' in thrown && typeof thrown.stack === 'string') {
         err.stack = thrown.stack;
       }
-      if (typeof thrown.code === 'string' || typeof thrown.code === 'number') {
+      if (
+        'code' in thrown &&
+        (typeof thrown.code === 'string' || typeof thrown.code === 'number')
+      ) {
         err.code = thrown.code;
       }
-      if (typeof thrown.name === 'string') {
+      if ('name' in thrown && typeof thrown.name === 'string') {
         err.name = thrown.name;
       }
       return err;
@@ -57,11 +67,83 @@ function ensureError(thrown) {
 
 process.on('message', (message) => {
   try {
+    if (typeof message !== 'object' || message === null) {
+      throw new Error(
+        `Invalid message, expected object, got ${typeName(message)}`,
+      );
+    }
+    if (!('type' in message) || typeof message.type === 'undefined') {
+      throw new Error(
+        'Invalid message, missing property type, expected string',
+      );
+    }
+    if (typeof message.type !== 'string') {
+      throw new Error(
+        `Invalid message, invalid issing property type, expected string, got ${typeName(
+          message.type,
+        )}`,
+      );
+    }
     if (message.type === 'lint') {
-      const { source, filePath, id } = message;
+      const id =
+        'id' in message && typeof message.id === 'number' ? message.id : null;
+      if (!id) {
+        throw new Error(`Invalid ${message.type}, missing id`);
+      }
+      if (!('source' in message) || typeof message.source === 'undefined') {
+        send({
+          type: 'lint-response',
+          status: 'error',
+          id,
+          data: new Error(
+            `Invalid ${message.type}, missing property source, expected string`,
+          ),
+        });
+        return;
+      }
+      if (typeof message.source !== 'string') {
+        send({
+          type: 'lint-response',
+          status: 'error',
+          id,
+          data: new Error(
+            `Invalid ${message.type}, missing property source, got ${typeName(
+              message.source,
+            )}`,
+          ),
+        });
+        return;
+      }
+      if (!('filePath' in message) || typeof message.filePath === 'undefined') {
+        send({
+          type: 'lint-response',
+          status: 'error',
+          id,
+          data: new Error(
+            `Invalid ${message.type}, missing property filePath, expected string`,
+          ),
+        });
+        return;
+      }
+      if (typeof message.filePath !== 'string') {
+        send({
+          type: 'lint-response',
+          status: 'error',
+          id,
+          data: new Error(
+            `Invalid ${
+              message.type
+            }, missing property filePath, expected string, got ${typeName(
+              message.filePath,
+            )}`,
+          ),
+        });
+        return;
+      }
+      const { source, filePath } = message;
       eslint.lintText(source, { filePath }).then(
         (results) => {
-          process.send({
+          send({
             type: 'lint-response',
             status: 'success',
             id,
@@ -70,7 +152,7 @@ process.on('message', (message) => {
         },
         (thrown) => {
           const error = ensureError(thrown);
-          process.send({
+          send({
             type: 'lint-response',
             status: 'error',
             id,
@@ -79,12 +161,14 @@ process.on('message', (message) => {
         },
       );
     } else {
-      process.send(
+      send(
         {
           type: 'error',
           error: {
             name: 'Error',
-            message: `Unknown message type: ${message.type}`,
+            message: `Unknown message type: ${
+              message.type ?? '[empty string]'
+            }`,
           },
         },
         () => {
@@ -94,7 +178,7 @@ process.on('message', (message) => {
     }
   } catch (thrown) {
     const error = ensureError(thrown);
-    process.send(
+    send(
       {
         type: 'error',
         error,

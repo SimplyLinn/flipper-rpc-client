@@ -1,3 +1,6 @@
+const FIRST_VERSION = '0.1';
+const LATEST_VERSION = '0.21';
+const BOOTSTRAP_VERSION = Symbol.for('PROTOBUF_BOOTSTRAP_VERSION');
 const PROTOBUF_VERSIONS = [
   '0.1',
   '0.2',
@@ -22,6 +25,9 @@ const PROTOBUF_VERSIONS = [
   '0.21',
 ];
 function loadVersion(version) {
+  if (version === BOOTSTRAP_VERSION) {
+    return Promise.resolve(require('./bootstrap/index.cjs'));
+  }
   return Promise.resolve(
     require(
       /* webpackChunkName: "protobuf-version" */
@@ -30,15 +36,14 @@ function loadVersion(version) {
     ),
   );
 }
-const FIRST_VERSION = '0.1';
-const LATEST_VERSION = '0.21';
 function isValidVersion(version) {
-  return PROTOBUF_VERSIONS.includes(version);
+  return version === BOOTSTRAP_VERSION || PROTOBUF_VERSIONS.includes(version);
 }
 module.exports = {
-  PROTOBUF_VERSIONS,
-  loadVersion,
   FIRST_VERSION,
   LATEST_VERSION,
+  BOOTSTRAP_VERSION,
+  PROTOBUF_VERSIONS,
+  loadVersion,
   isValidVersion,
 };

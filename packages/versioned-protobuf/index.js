@@ -1,3 +1,5 @@
+export const FIRST_VERSION = '0.1';
+export const LATEST_VERSION = '0.21';
 export const PROTOBUF_VERSIONS = [
   '0.1',
   '0.2',
@@ -21,15 +23,17 @@ export const PROTOBUF_VERSIONS = [
   '0.20',
   '0.21',
 ];
+export const BOOTSTRAP_VERSION = Symbol.for('PROTOBUF_BOOTSTRAP_VERSION');
 export function loadVersion(version) {
+  if (version === BOOTSTRAP_VERSION) {
+    return import('./bootstrap/index.js');
+  }
   return import(
     /* webpackChunkName: "protobuf-version" */
     /* webpackMode: "lazy-once" */
     `./v/${version}/index.js`
   );
 }
-export const FIRST_VERSION = '0.1';
-export const LATEST_VERSION = '0.21';
 export function isValidVersion(version) {
-  return PROTOBUF_VERSIONS.includes(version);
+  return version === BOOTSTRAP_VERSION || PROTOBUF_VERSIONS.includes(version);
 }

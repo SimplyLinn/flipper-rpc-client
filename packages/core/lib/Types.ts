@@ -4,81 +4,33 @@ import type {
   PROTOBUF_VERSIONS,
   PROTOBUF_VERSION_MAP,
 } from '@flipper-rpc-client/versioned-protobuf';
-import type * as Bootstrap from '@flipper-rpc-client/versioned-protobuf/bootstrap';
-
-// eslint-disable-next-line @typescript-eslint/no-namespace
-export namespace ResolveOrBootstrap {
-  export type Version<V extends PROTOBUF_VERSION | 'bootstrap'> =
-    | PROTOBUF_VERSION_MAP[Extract<V, PROTOBUF_VERSION>]
-    | (V extends 'bootstrap' ? typeof Bootstrap : never);
-  export type MainCtor<V extends PROTOBUF_VERSION | 'bootstrap'> =
-    Version<V>['PB']['Main'];
-
-  export type Main<V extends PROTOBUF_VERSION | 'bootstrap'> = InstanceType<
-    MainCtor<V>
-  >;
-
-  export type Parameters<V extends PROTOBUF_VERSION | 'bootstrap'> =
-    ConstructorParameters<MainCtor<V>>;
-
-  export type Options<V extends PROTOBUF_VERSION | 'bootstrap'> = NonNullable<
-    Parameters<V>[0]
-  >;
-
-  export type DefaultMainParams<V extends PROTOBUF_VERSION | 'bootstrap'> =
-    NonNullable<unknown> extends Options<V>
-      ? [
-          defaultMainProperties?: {
-            [key in keyof Omit<
-              Options<V>,
-              'commandId' | 'hasNext'
-            >]: Options<V>[key];
-          },
-        ]
-      : [
-          defaultMainProperties: {
-            [key in keyof Omit<
-              Options<V>,
-              'commandId' | 'hasNext'
-            >]: Options<V>[key];
-          },
-        ];
-}
 
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace Resolve {
-  export type Version<V extends PROTOBUF_VERSION> = PROTOBUF_VERSION_MAP[V];
+  export type Version<V extends keyof PROTOBUF_VERSION_MAP> =
+    PROTOBUF_VERSION_MAP[V];
 
-  export type MainCtor<V extends PROTOBUF_VERSION> = Version<V>['PB']['Main'];
+  export type MainCtor<V extends keyof PROTOBUF_VERSION_MAP> =
+    Version<V>['PB']['Main'];
 
-  export type Main<V extends PROTOBUF_VERSION> = InstanceType<MainCtor<V>>;
-
-  export type Parameters<V extends PROTOBUF_VERSION> = ConstructorParameters<
+  export type Main<V extends keyof PROTOBUF_VERSION_MAP> = InstanceType<
     MainCtor<V>
   >;
 
-  export type Options<V extends PROTOBUF_VERSION> = NonNullable<
+  export type CommandStatus<V extends keyof PROTOBUF_VERSION_MAP> =
+    Version<V>['PB']['CommandStatus'];
+
+  export type Parameters<V extends keyof PROTOBUF_VERSION_MAP> =
+    ConstructorParameters<MainCtor<V>>;
+
+  export type Options<V extends keyof PROTOBUF_VERSION_MAP> = NonNullable<
     Parameters<V>[0]
   >;
 
-  export type DefaultMainParams<V extends PROTOBUF_VERSION> =
+  export type DefaultMainParams<V extends keyof PROTOBUF_VERSION_MAP> =
     NonNullable<unknown> extends Options<V>
-      ? [
-          defaultMainProperties?: {
-            [key in keyof Omit<
-              Options<V>,
-              'commandId' | 'hasNext'
-            >]: Options<V>[key];
-          },
-        ]
-      : [
-          defaultMainProperties: {
-            [key in keyof Omit<
-              Options<V>,
-              'commandId' | 'hasNext'
-            >]: Options<V>[key];
-          },
-        ];
+      ? [defaultMainProperties?: Options<V>]
+      : [defaultMainProperties: Options<V>];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -133,10 +85,104 @@ export namespace Version {
   export type Between<
     MinV extends PROTOBUF_VERSION,
     MaxV extends PROTOBUF_VERSION,
-  > = Exclude<PROTOBUF_VERSION, UpMap[MaxV] | DownMap[MinV]>;
+  > = Exclude<UpMap[MinV], Exclude<UpMap[MaxV], MaxV>>;
 }
 
-export interface PatchedMainCtor<Version extends PROTOBUF_VERSION> {
+export interface PatchedMainCtor<Version extends keyof PROTOBUF_VERSION_MAP> {
+  /**
+   * Constructs a new Main.
+   * @param [properties] Properties to set
+   */
+  new (...params: Resolve.Parameters<Version>): Resolve.Main<Version>;
+
+  /**
+   * Creates a new Main instance using the specified properties.
+   * @param [properties] Properties to set
+   * @returns Main instance
+   */
+  create(properties?: Resolve.Options<Version>): Resolve.Main<Version>;
+
+  /**
+   * Encodes the specified Main message. Does not implicitly {@link PatchedMainCtor.verify|verify} messages.
+   * @param message Main message or plain object to encode
+   * @param [writer] Writer to encode to
+   * @returns Writer
+   */
+  encode(
+    message: Resolve.Options<Version>,
+    writer?: protobuf.Writer,
+  ): protobuf.Writer;
+
+  /**
+   * Encodes the specified Main message, length delimited. Does not implicitly {@link PatchedMainCtor.verify|verify} messages.
+   * @param message Main message or plain object to encode
+   * @param [writer] Writer to encode to
+   * @returns Writer
+   */
+  encodeDelimited(
+    message: Resolve.Options<Version>,
+    writer?: protobuf.Writer,
+  ): protobuf.Writer;
+
+  /**
+   * Decodes a Main message from the specified reader or buffer.
+   * @param reader Reader or buffer to decode from
+   * @param [length] Message length if known beforehand
+   * @returns Main
+   * @throws {Error} If the payload is not a reader or valid buffer
+   * @throws {$protobuf.util.ProtocolError} If required fields are missing
+   */
+  decode(
+    reader: protobuf.Reader | Uint8Array,
+    length?: number,
+  ): Resolve.Main<Version>;
+
+  /**
+   * Decodes a Main message from the specified reader or buffer, length delimited.
+   * @param reader Reader or buffer to decode from
+   * @returns Main
+   * @throws {Error} If the payload is not a reader or valid buffer
+   * @throws {$protobuf.util.ProtocolError} If required fields are missing
+   */
+  decodeDelimited(reader: protobuf.Reader | Uint8Array): Resolve.Main<Version>;
+
+  /**
+   * Verifies a Main message.
+   * @param message Plain object to verify
+   * @returns `null` if valid, otherwise the reason why it is not
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  verify(message: Record<string, any>): string | null;
+
+  /**
+   * Creates a Main message from a plain object. Also converts values to their respective internal types.
+   * @param object Plain object
+   * @returns Main
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fromObject(object: Record<string, any>): Resolve.Main<Version>;
+
+  /**
+   * Creates a plain object from a Main message. Also converts values to other types if specified.
+   * @param message Main
+   * @param [options] Conversion options
+   * @returns Plain object
+   */
+  toObject(
+    message: Resolve.Main<Version>,
+    options?: protobuf.IConversionOptions,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Record<string, any>;
+
+  /**
+   * Gets the default type url for Main
+   * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+   * @returns The default type url
+   */
+  getTypeUrl(typeUrlPrefix?: string): string;
+}
+
+export interface PatchedSystemCtor<Version extends keyof PROTOBUF_VERSION_MAP> {
   /**
    * Constructs a new Main.
    * @param [properties] Properties to set
