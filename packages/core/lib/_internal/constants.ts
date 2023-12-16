@@ -1,2 +1,0 @@
-export const SUPPORTED_VERSIONS = Symbol.for('SUPPORTED_VERSIONS');
-export type SUPPORTED_VERSIONS = typeof SUPPORTED_VERSIONS;

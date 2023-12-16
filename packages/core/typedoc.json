@@ -8,9 +8,20 @@
     "lib/Types.ts",
     "lib/StreamProtobufReader.ts",
     "lib/Utils.ts",
-    "lib/Commands.ts",
-    "lib/MatchProtobufVersion.ts",
-    "lib/Commands/v/0.1.ts"
+    "lib/MatchProtobufVersion.ts"
   ],
-  "intentionallyNotExported": ["lib/Types.ts:UpMap", "lib/Types.ts:DownMap", "lib/MatchProtobufVersion.ts:PB_Main"]
+  "intentionallyNotExported": ["lib/MatchProtobufVersion.ts:PB_Main"],
+  "plugin": ["@flipper-rpc-client/typedoc-plugin"],
+  "tsconfig": "tsconfig.typedoc.json",
+  "compilerOptions": {
+    "paths": {
+      "@flipper-rpc-client/commands": ["../commands/lib/index.ts"],
+      "@flipper-rpc-client/commands/*": [
+        "../commands/lib/*.ts",
+        "../commands/lib/*/index.ts"
+      ],
+      "@flipper-rpc-client/core": ["./lib/index.ts"],
+      "@flipper-rpc-client/core/*": ["./lib/*.ts", "../lib/*/index.ts"]
+    }
+  }
 }

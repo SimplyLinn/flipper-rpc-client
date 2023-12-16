@@ -4,8 +4,12 @@
     "noEmit": false,
     "emitDeclarationOnly": true,
     "declaration": true,
-    "declarationDir": "dist/types"
+    "declarationDir": "dist/types",
+    "paths": {
+      "@flipper-rpc-client/core": ["./lib/index.ts"],
+      "@flipper-rpc-client/core/*": ["./lib/*.ts", "./lib/*/index.ts"],
+    }
   },
   "include": ["lib"],
-  "exclude": ["node_modules", "../../node_modules"]
+  "exclude": ["**/node_modules", "./dist"]
 }

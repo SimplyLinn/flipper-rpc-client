@@ -19,7 +19,18 @@
     },
     "./version-namespace": {
       "types": "./version-namespace.d.ts"
-    }
+    },
+    "./Types": {
+      "types": "./Types.d.ts"
+    },
+    "./Resolve": {
+      "types": "./Resolve/index.d.ts"
+    },
+    "./Resolve/*": [{
+      "types": "./Resolve/*.d.ts"
+    }, {
+      "types": "./Resolve/*/index.d.ts"
+    }]
   },
   "files": [
     "v/*/index.js",

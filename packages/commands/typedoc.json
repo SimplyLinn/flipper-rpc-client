@@ -1,0 +1,17 @@
+{
+  "extends": ["../../typedoc.base.json"],
+  "entryPoints": ["lib/*.ts"],
+  "plugin": ["@flipper-rpc-client/typedoc-plugin"],
+  "tsconfig": "tsconfig.typedoc.json",
+  "compilerOptions": {
+    "paths": {
+      "@flipper-rpc-client/commands": ["./lib/index.ts"],
+      "@flipper-rpc-client/commands/*": ["./lib/*.ts", "./lib/*/index.ts"],
+      "@flipper-rpc-client/core": ["../core/lib/index.ts"],
+      "@flipper-rpc-client/core/*": [
+        "../core/lib/*.ts",
+        "../core/lib/*/index.ts"
+      ]
+    }
+  }
+}

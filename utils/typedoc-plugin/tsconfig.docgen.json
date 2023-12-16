@@ -1,0 +1,12 @@
+{
+  "extends": ["./tsconfig.json"],
+  "compilerOptions": {
+    "target": "es2020",
+    // Would be really nice to be able to use NodeNext
+    // Blocked on https://github.com/mdn/browser-compat-data/pull/21270
+    // "module": "NodeNext",
+    "noEmit": true,
+    "rootDir": "./examples"
+  },
+  "include": ["./examples"]
+}

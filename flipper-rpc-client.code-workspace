@@ -35,6 +35,10 @@
     {
       "name": "util:flipper-cli",
       "path": "utils/flipper-cli"
+    },
+    {
+      "name": "util:typedoc-plugin",
+      "path": "utils/typedoc-plugin"
     }
   ],
   "settings": {
@@ -50,7 +54,8 @@
       "demo:node",
       "demo:web",
       "util:compile-proto",
-      "util:flipper-cli"
+      "util:flipper-cli",
+      "util:typedoc-plugin"
     ],
     "files.exclude": {
       "**/.history": true

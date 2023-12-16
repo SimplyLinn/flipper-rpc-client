@@ -38,10 +38,6 @@
       "outputMode": "new-only"
     },
     "build": {
-      // A package's `build` script depends on that package's
-      // dependencies and devDependencies
-      // `build` tasks  being completed first
-      // (the `^` symbol signifies `upstream`).
       "dependsOn": ["^build", "build:esm", "build:cjs", "build:types"],
       "outputMode": "new-only"
     },

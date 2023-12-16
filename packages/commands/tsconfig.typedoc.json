@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@flipper-rpc-client/commands": ["./lib/index.ts"],
+      "@flipper-rpc-client/commands/*": ["./lib/*.ts", "./lib/*/index.ts"],
+      "@flipper-rpc-client/core": ["../core/lib/index.ts"],
+      "@flipper-rpc-client/core/*": [
+        "../core/lib/*.ts",
+        "../core/lib/*/index.ts"
+      ]
+    }
+  },
+  "include": ["lib"],
+  "exclude": ["**/node_modules", "dist"]
+}

@@ -9,8 +9,9 @@ import {
   PROTOBUF_VERSIONS,
 } from '@flipper-rpc-client/versioned-protobuf';
 import { PB as BootstrapPB } from '@flipper-rpc-client/versioned-protobuf/bootstrap';
+import type { Main } from '@flipper-rpc-client/versioned-protobuf/Resolve/PB';
+import type { Version } from '@flipper-rpc-client/versioned-protobuf/Types';
 import RpcSerialPort from './RpcSerialPort.js';
-import { Resolve, Version } from './Types.js';
 import { ContextualizeError } from './Utils.js';
 import { ProtocolError } from './Errors/ProtocolError.js';
 import { CommandError } from './Errors/CommandError.js';
@@ -606,33 +607,33 @@ export type CreateArgs<
   Version extends PROTOBUF_VERSION,
   Options,
   // eslint-disable-next-line @typescript-eslint/ban-types
-> = {} extends Resolve.Options<Version>
+> = {} extends Main.Options<Version>
   ? Options extends undefined
     ? [
         options?: Options,
         defaultMainProperties?: {
           [key in keyof Omit<
-            Resolve.Options<Version>,
+            Main.Options<Version>,
             'commandId' | 'hasNext'
-          >]: Resolve.Options<Version>[key];
+          >]: Main.Options<Version>[key];
         },
       ]
     : [
         options: Options,
         defaultMainProperties?: {
           [key in keyof Omit<
-            Resolve.Options<Version>,
+            Main.Options<Version>,
             'commandId' | 'hasNext'
-          >]: Resolve.Options<Version>[key];
+          >]: Main.Options<Version>[key];
         },
       ]
   : [
       options: Options,
       defaultMainProperties: {
         [key in keyof Omit<
-          Resolve.Options<Version>,
+          Main.Options<Version>,
           'commandId' | 'hasNext'
-        >]: Resolve.Options<Version>[key];
+        >]: Main.Options<Version>[key];
       },
     ];
 
@@ -642,7 +643,7 @@ export function makeCreateFunction<
     port: PortType,
     version: Version,
     matchMode: matchProtobufVersion.Mode,
-    ...defaultMainProperties: Resolve.DefaultMainParams<Version>
+    ...defaultMainProperties: Main.DefaultParams<Version>
   ) => RpcApi<Version>,
 >(Ctor: ApiType) {
   type PB_Main<Version extends PROTOBUF_VERSION> = Awaited<
@@ -653,7 +654,7 @@ export function makeCreateFunction<
     options:
       | { version: Version; force?: boolean }
       | { version: Version; requireExactMatch?: boolean },
-    defaultMainProperties?: Resolve.Options<Version>,
+    defaultMainProperties?: Main.Options<Version>,
   ): Promise<PB_Main<Version>>;
   async function create<const MinV extends PROTOBUF_VERSION>(
     port: PortType,
@@ -663,7 +664,7 @@ export function makeCreateFunction<
           minVersion: MinV;
           fallbackVersion?: Version.AndUp<MinV>;
         },
-    defaultMainProperties?: Resolve.Options<Version.AndUp<MinV>>,
+    defaultMainProperties?: Main.Options<Version.AndUp<MinV>>,
   ): Promise<PB_Main<Version.AndUp<MinV>>>;
   async function create<const MaxV extends PROTOBUF_VERSION>(
     port: PortType,
@@ -673,7 +674,7 @@ export function makeCreateFunction<
           maxVersion: MaxV;
           fallbackVersion?: Version.AndDown<MaxV>;
         },
-    defaultMainProperties?: Resolve.Options<Version.AndDown<MaxV>>,
+    defaultMainProperties?: Main.Options<Version.AndDown<MaxV>>,
   ): Promise<PB_Main<Version.AndDown<MaxV>>>;
   async function create<
     const MinV extends PROTOBUF_VERSION,
@@ -686,7 +687,7 @@ export function makeCreateFunction<
           maxVersion: MaxV;
           fallbackVersion?: Version.Between<MinV, MaxV>;
         },
-    defaultMainProperties?: Resolve.Options<Version.Between<MinV, MaxV>>,
+    defaultMainProperties?: Main.Options<Version.Between<MinV, MaxV>>,
   ): Promise<PB_Main<Version.Between<MinV, MaxV>>>;
   async function create(
     port: PortType,
@@ -694,14 +695,14 @@ export function makeCreateFunction<
       requireExactMatch?: boolean;
       fallbackVersion?: PROTOBUF_VERSION;
     } | null,
-    defaultMainProperties?: Resolve.Options<PROTOBUF_VERSION>,
+    defaultMainProperties?: Main.Options<PROTOBUF_VERSION>,
   ): Promise<PB_Main<PROTOBUF_VERSION>>;
   async function create(
     this: ApiType,
     port: PortType,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     options?: any,
-    ...defaultMainProperties: Resolve.DefaultMainParams<PROTOBUF_VERSION>
+    ...defaultMainProperties: Main.DefaultParams<PROTOBUF_VERSION>
   ): Promise<unknown> {
     const { version, matchMode } = await matchProtobufVersion<PROTOBUF_VERSION>(
       port,

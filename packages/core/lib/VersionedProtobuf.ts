@@ -1,13 +1,14 @@
 import type * as _ from '@flipper-rpc-client/versioned-protobuf/version-namespace';
 import { PROTOBUF_VERSION_MAP } from '@flipper-rpc-client/versioned-protobuf';
-import { PatchedMainCtor, Resolve } from './Types.js';
+import { Resolve, PB } from '@flipper-rpc-client/versioned-protobuf/Resolve';
+import { PatchedMainCtor } from './Types.js';
 import { StreamProtobufReader } from './StreamProtobufReader.js';
 
 export class VersionedProtobuf<Version extends keyof PROTOBUF_VERSION_MAP> {
-  #Module: Resolve.Version<Version>;
-  readonly Reader: StreamProtobufReader<Resolve.Main<Version>>;
+  #Module: Resolve<Version>;
+  readonly Reader: StreamProtobufReader<PB.Main<Version>>;
 
-  constructor(module: Resolve.Version<Version>) {
+  constructor(module: Resolve<Version>) {
     this.#Module = module;
     this.Reader = new StreamProtobufReader(
       module.PB.Main as PatchedMainCtor<Version>,
@@ -18,7 +19,7 @@ export class VersionedProtobuf<Version extends keyof PROTOBUF_VERSION_MAP> {
     return this.#Module.PB.Main as PatchedMainCtor<Version>;
   }
 
-  get CommandStatus(): Resolve.CommandStatus<Version> {
+  get CommandStatus(): PB.CommandStatus.Enum<Version> {
     return this.#Module.PB.CommandStatus;
   }
 }

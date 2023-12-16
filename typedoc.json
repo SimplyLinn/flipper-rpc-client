@@ -2,8 +2,22 @@
   "entryPoints": ["packages/*"],
   "name": "Packages Example",
   "entryPointStrategy": "packages",
-  "includeVersion": false
-
+  "includeVersion": false,
+  "plugin": ["@flipper-rpc-client/typedoc-plugin"],
+  "compilerOptions": {
+    "paths": {
+      "@flipper-rpc-client/commands": ["./packages/commands/lib/index.ts"],
+      "@flipper-rpc-client/commands/*": [
+        "./packages/commands/lib/*.ts",
+        "./packages/commands/lib/*/index.ts"
+      ],
+      "@flipper-rpc-client/core": ["./packages/core/lib/index.ts"],
+      "@flipper-rpc-client/core/*": [
+        "./packages/core/lib/*.ts",
+        "./packages/core/lib/*/index.ts"
+      ]
+    }
+  }
   // Potentially useful for debugging
   // "logLevel": "Verbose"
 }

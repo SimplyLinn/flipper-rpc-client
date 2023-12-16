@@ -19,3 +19,5 @@ export type * as v0_18 from './v/0.18/index.d.ts';
 export type * as v0_19 from './v/0.19/index.d.ts';
 export type * as v0_20 from './v/0.20/index.d.ts';
 export type * as v0_21 from './v/0.21/index.d.ts';
+export type { default as Resolve } from './Resolve/index.d.ts';
+export type * as Types from './Types.d.ts';

@@ -1,0 +1,38 @@
+{
+  "name": "@flipper-rpc-client/typedoc-plugin",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "description": "",
+  "files": [
+    "dist/index.js",
+    "dist/typescript.js",
+    "dist/webApi.js",
+    "data/web-api.json"
+  ],
+  "scripts": {
+    "lint": "prettier --check .",
+    "build": "tsc",
+    "dev": "nodemon --watch \"src/**/*\" --watch typedoc.json --watch tsconfig.json --exec \"tsc && typedoc --watch\"",
+    "generateWebApiIndex": "node ./scripts/generateWebApiIndex.js",
+    "test": "vitest run"
+  },
+  "nodemonConfig": {
+    "delay": 500,
+    "ext": "ts,js,mts,mjs,cts,cjs,json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "typedoc": ">= 0.23.14 || 0.24.x || 0.25.x"
+  },
+  "devDependencies": {
+    "@types/node": "20.9.3",
+    "@webgpu/types": "0.1.40",
+    "nodemon": "3.0.2",
+    "prettier": "3.1.0",
+    "typedoc": "0.25.4",
+    "typescript": "5.1.6",
+    "vitest": "1.0.2"
+  }
+}

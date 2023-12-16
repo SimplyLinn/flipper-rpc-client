@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "dist/types",
+    "paths": {
+      "@flipper-rpc-client/commands": ["./lib/index.ts"],
+      "@flipper-rpc-client/commands/*": ["./lib/*.ts", "./lib/*/index.ts"],
+    }
+  },
+  "include": ["lib"],
+  "exclude": ["**/node_modules", "dist"]
+}
